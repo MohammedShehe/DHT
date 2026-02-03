@@ -10,11 +10,11 @@ import '../utils/api_config.dart';
 class ProfileService {
   static String get baseUrl => ApiConfig.baseUrl;
   
-  // Check network connectivity - UPDATED for web compatibility
+  // Check network connectivity
   static Future<bool> _checkNetwork() async {
     try {
       if (kIsWeb) {
-        // For web, we'll assume connectivity is present
+        // For web, assume connectivity is present
         return true;
       } else {
         final connectivityResult = await Connectivity().checkConnectivity();
@@ -182,11 +182,11 @@ class ProfileService {
     }
   }
 
-  // Upload profile picture - UPDATED VERSION (works for both web and mobile)
+  // Upload profile picture - FIXED VERSION
   static Future<Map<String, dynamic>> uploadProfilePic({
-    required File imageFile,
-    required String fileName,
-    required Uint8List bytes,
+    File? imageFile,
+    String? fileName,
+    Uint8List? bytes,
   }) async {
     if (!await _checkNetwork()) {
       return {
@@ -196,8 +196,14 @@ class ProfileService {
     }
 
     try {
-      // Get auth headers with proper Authorization header
-      final headers = await AuthService.getAuthHeaders();
+      // Get auth headers for multipart request
+      final token = await AuthService.getStoredToken();
+      if (token == null) {
+        return {
+          'success': false,
+          'message': 'Authentication required. Please login again.',
+        };
+      }
       
       // Create multipart request
       var request = http.MultipartRequest(
@@ -205,12 +211,46 @@ class ProfileService {
         Uri.parse('$baseUrl/profile/profile-pic'),
       );
 
-      // Copy the Authorization header from headers
-      request.headers['Authorization'] = headers['Authorization']!;
+      // Set authorization header
+      request.headers['Authorization'] = 'Bearer $token';
+      
+      // Determine the bytes and filename
+      Uint8List fileBytes;
+      String actualFileName;
+      
+      if (kIsWeb) {
+        // For web, use the bytes directly
+        if (bytes == null) {
+          return {
+            'success': false,
+            'message': 'No image data provided',
+          };
+        }
+        fileBytes = bytes;
+        actualFileName = fileName ?? 'profile_pic_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      } else {
+        // For mobile, read from file
+        if (imageFile == null) {
+          return {
+            'success': false,
+            'message': 'No image file provided',
+          };
+        }
+        fileBytes = await imageFile.readAsBytes();
+        actualFileName = fileName ?? imageFile.path.split('/').last;
+      }
+      
+      // Validate file size (max 5MB)
+      if (fileBytes.length > 5 * 1024 * 1024) {
+        return {
+          'success': false,
+          'message': 'Image file is too large. Maximum size is 5MB.',
+        };
+      }
       
       // Get file extension
       String extension = 'jpg';
-      final fileNameLower = fileName.toLowerCase();
+      final fileNameLower = actualFileName.toLowerCase();
       if (fileNameLower.endsWith('.png')) {
         extension = 'png';
       } else if (fileNameLower.endsWith('.jpeg')) {
@@ -219,11 +259,20 @@ class ProfileService {
         extension = 'jpg';
       }
       
-      // Create multipart file from bytes
+      // Get MIME type
+      String mimeType;
+      if (extension == 'png') {
+        mimeType = 'image/png';
+      } else {
+        mimeType = 'image/jpeg';
+      }
+      
+      // Create multipart file from bytes - FIXED: Use content-type string directly
       final multipartFile = http.MultipartFile.fromBytes(
-        'image', // This matches your multer configuration (upload.single('image'))
-        bytes,
+        'image', // This matches multer configuration (upload.single('image'))
+        fileBytes,
         filename: 'profile_pic_${DateTime.now().millisecondsSinceEpoch}.$extension',
+        contentType: http.MediaType.parse(mimeType), // FIXED: Use http.MediaType.parse
       );
       request.files.add(multipartFile);
 
@@ -248,6 +297,16 @@ class ProfileService {
           'success': false,
           'message': 'Invalid image file. Please select a valid image (JPEG, PNG).',
         };
+      } else if (response.statusCode == 413) {
+        return {
+          'success': false,
+          'message': 'Image file is too large. Please select a smaller image.',
+        };
+      } else if (response.statusCode == 415) {
+        return {
+          'success': false,
+          'message': 'Unsupported image format. Please use JPEG or PNG.',
+        };
       } else {
         try {
           final data = json.decode(responseBody);
@@ -258,10 +317,20 @@ class ProfileService {
         } catch (e) {
           return {
             'success': false,
-            'message': 'Server error: ${response.reasonPhrase}',
+            'message': 'Server error: ${response.statusCode} ${response.reasonPhrase}',
           };
         }
       }
+    } on SocketException catch (_) {
+      return {
+        'success': false,
+        'message': 'No internet connection. Please check your network.',
+      };
+    } on http.ClientException catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.message}',
+      };
     } catch (e) {
       return {
         'success': false,
@@ -308,6 +377,16 @@ class ProfileService {
           'message': data['message'] ?? 'Failed to change password',
         };
       }
+    } on SocketException catch (_) {
+      return {
+        'success': false,
+        'message': 'No internet connection. Please check your network.',
+      };
+    } on http.ClientException catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.message}',
+      };
     } catch (e) {
       return {
         'success': false,

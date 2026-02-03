@@ -2,35 +2,50 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/api_config.dart';
 
 class AuthService {
   static String get baseUrl => '${ApiConfig.baseUrl}/auth';
-  static const FlutterSecureStorage _storage = FlutterSecureStorage();
+  
+  // Storage instances for different platforms
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  static SharedPreferences? _sharedPreferences;
+  
   static String? _token;
 
   static String? get token => _token;
 
-  // Initialize token from secure storage
+  // Initialize token from appropriate storage
   static Future<void> initializeToken() async {
     if (kIsWeb) {
-      // For web, use shared_preferences or skip secure storage
-      // For now, we'll use a simple approach
-      _token = null;
+      // For web, use shared_preferences
+      if (_sharedPreferences == null) {
+        _sharedPreferences = await SharedPreferences.getInstance();
+      }
+      _token = _sharedPreferences!.getString('auth_token');
     } else {
-      _token = await _storage.read(key: 'auth_token');
+      // For mobile, use secure storage
+      _token = await _secureStorage.read(key: 'auth_token');
     }
   }
 
-  // Save token to secure storage
+  // Save token to appropriate storage
   static Future<void> _saveToken(String token) async {
     _token = token;
-    if (!kIsWeb) {
-      await _storage.write(key: 'auth_token', value: token);
+    
+    if (kIsWeb) {
+      // For web, use shared_preferences
+      if (_sharedPreferences == null) {
+        _sharedPreferences = await SharedPreferences.getInstance();
+      }
+      await _sharedPreferences!.setString('auth_token', token);
+    } else {
+      // For mobile, use secure storage
+      await _secureStorage.write(key: 'auth_token', value: token);
     }
-    // For web, you might want to use shared_preferences or another storage method
   }
 
   // ✅ ADDED: Store token method (public version of _saveToken)
@@ -38,13 +53,20 @@ class AuthService {
     await _saveToken(token);
   }
 
-  // Clear token from secure storage
+  // Clear token from storage
   static Future<void> clearToken() async {
     _token = null;
-    if (!kIsWeb) {
-      await _storage.delete(key: 'auth_token');
+    
+    if (kIsWeb) {
+      // For web, use shared_preferences
+      if (_sharedPreferences == null) {
+        _sharedPreferences = await SharedPreferences.getInstance();
+      }
+      await _sharedPreferences!.remove('auth_token');
+    } else {
+      // For mobile, use secure storage
+      await _secureStorage.delete(key: 'auth_token');
     }
-    // For web, clear from whatever storage you're using
   }
 
   // Get headers with authorization token
@@ -64,12 +86,12 @@ class AuthService {
     };
   }
 
-  // Check network connectivity - UPDATED for web compatibility
+  // Check network connectivity
   static Future<bool> _checkNetwork() async {
     try {
       if (kIsWeb) {
-        // For web, we'll assume connectivity is present
-        // You could add a more sophisticated check here if needed
+        // For web, use navigator.onLine if available
+        // Fallback to true for web as connectivity_plus may not work perfectly on web
         return true;
       } else {
         final connectivityResult = await Connectivity().checkConnectivity();
@@ -80,7 +102,7 @@ class AuthService {
     }
   }
 
-  // Register with email/password - UPDATED: Now saves token from response
+  // Register with email/password
   static Future<Map<String, dynamic>> register({
     required String fullName,
     required String email,
@@ -126,6 +148,16 @@ class AuthService {
           'message': data['message'] ?? 'Registration failed',
         };
       }
+    } on SocketException catch (_) {
+      return {
+        'success': false,
+        'message': 'No internet connection. Please check your network.',
+      };
+    } on http.ClientException catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.message}',
+      };
     } catch (e) {
       return {
         'success': false,
@@ -134,7 +166,7 @@ class AuthService {
     }
   }
 
-  // Login with email/password - UPDATED: Always save token
+  // Login with email/password
   static Future<Map<String, dynamic>> login({
     required String email,
     required String password,
@@ -159,7 +191,7 @@ class AuthService {
       final data = json.decode(response.body);
       
       if (response.statusCode == 200) {
-        // Always save token to secure storage
+        // Always save token to storage
         await _saveToken(data['token']);
         
         return {
@@ -173,6 +205,16 @@ class AuthService {
           'message': data['message'] ?? 'Login failed',
         };
       }
+    } on SocketException catch (_) {
+      return {
+        'success': false,
+        'message': 'No internet connection. Please check your network.',
+      };
+    } on http.ClientException catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.message}',
+      };
     } catch (e) {
       return {
         'success': false,
@@ -204,7 +246,7 @@ class AuthService {
       final data = json.decode(response.body);
       
       if (response.statusCode == 200) {
-        // Always save token to secure storage
+        // Always save token to storage
         await _saveToken(data['token']);
         
         return {
@@ -218,6 +260,16 @@ class AuthService {
           'message': data['message'] ?? 'Google login failed',
         };
       }
+    } on SocketException catch (_) {
+      return {
+        'success': false,
+        'message': 'No internet connection. Please check your network.',
+      };
+    } on http.ClientException catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.message}',
+      };
     } catch (e) {
       return {
         'success': false,
@@ -259,6 +311,16 @@ class AuthService {
           'message': data['message'] ?? 'Failed to send OTP',
         };
       }
+    } on SocketException catch (_) {
+      return {
+        'success': false,
+        'message': 'No internet connection. Please check your network.',
+      };
+    } on http.ClientException catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.message}',
+      };
     } catch (e) {
       return {
         'success': false,
@@ -302,6 +364,16 @@ class AuthService {
           'message': data['message'] ?? 'OTP verification failed',
         };
       }
+    } on SocketException catch (_) {
+      return {
+        'success': false,
+        'message': 'No internet connection. Please check your network.',
+      };
+    } on http.ClientException catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.message}',
+      };
     } catch (e) {
       return {
         'success': false,
@@ -349,6 +421,16 @@ class AuthService {
           'message': data['message'] ?? 'Password reset failed',
         };
       }
+    } on SocketException catch (_) {
+      return {
+        'success': false,
+        'message': 'No internet connection. Please check your network.',
+      };
+    } on http.ClientException catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.message}',
+      };
     } catch (e) {
       return {
         'success': false,
@@ -369,7 +451,7 @@ class AuthService {
     return _token;
   }
 
-  // ✅ ADDED: Get user ID from token (helper method)
+  // ✅ Get user ID from token (helper method)
   static Future<String?> getUserId() async {
     final token = await getStoredToken();
     if (token == null) return null;
@@ -382,7 +464,7 @@ class AuthService {
       final payload = parts[1];
       final normalized = base64Url.normalize(payload);
       final decoded = utf8.decode(base64Url.decode(normalized));
-      final payloadMap = json.decode(decoded);
+      final payloadMap = json.decode(decoded) as Map<String, dynamic>;
       
       return payloadMap['id']?.toString();
     } catch (e) {
@@ -390,7 +472,27 @@ class AuthService {
     }
   }
 
-  // ✅ ADDED: Logout method that also clears token
+  // ✅ Get user email from token
+  static Future<String?> getUserEmail() async {
+    final token = await getStoredToken();
+    if (token == null) return null;
+    
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+      
+      final payload = parts[1];
+      final normalized = base64Url.normalize(payload);
+      final decoded = utf8.decode(base64Url.decode(normalized));
+      final payloadMap = json.decode(decoded) as Map<String, dynamic>;
+      
+      return payloadMap['email']?.toString();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ✅ Logout method that also clears token
   static Future<void> logout() async {
     try {
       // Call backend logout endpoint if needed
@@ -414,13 +516,7 @@ class AuthService {
     }
   }
 
-  // ✅ ADDED: Refresh token if needed (placeholder for future implementation)
-  static Future<bool> refreshToken() async {
-    // Implement token refresh logic here if needed
-    return false;
-  }
-
-  // ✅ ADDED: Check token validity
+  // ✅ Check token validity
   static Future<bool> isTokenValid() async {
     final token = await getStoredToken();
     if (token == null) return false;
@@ -433,7 +529,7 @@ class AuthService {
       final payload = parts[1];
       final normalized = base64Url.normalize(payload);
       final decoded = utf8.decode(base64Url.decode(normalized));
-      final payloadMap = json.decode(decoded);
+      final payloadMap = json.decode(decoded) as Map<String, dynamic>;
       
       final exp = payloadMap['exp'] as int?;
       if (exp == null) return false;
@@ -441,9 +537,52 @@ class AuthService {
       final expiryTime = DateTime.fromMillisecondsSinceEpoch(exp * 1000);
       final currentTime = DateTime.now();
       
-      return expiryTime.isAfter(currentTime);
+      // Check if token expires within 5 minutes (for refresh consideration)
+      final bufferTime = expiryTime.subtract(const Duration(minutes: 5));
+      return currentTime.isBefore(bufferTime);
     } catch (e) {
       return false;
     }
+  }
+
+  // ✅ Clear all authentication data
+  static Future<void> clearAllAuthData() async {
+    await clearToken();
+    
+    if (kIsWeb && _sharedPreferences != null) {
+      // Clear any other auth-related data from shared preferences
+      await _sharedPreferences!.remove('user_email');
+      await _sharedPreferences!.remove('user_name');
+    }
+  }
+
+  // ✅ Initialize the service (call this early in your app)
+  static Future<void> initialize() async {
+    await initializeToken();
+  }
+
+  // ✅ Get authentication status with validity check
+  static Future<Map<String, dynamic>> getAuthStatus() async {
+    final hasToken = await isLoggedIn();
+    final tokenValid = await isTokenValid();
+    
+    return {
+      'loggedIn': hasToken,
+      'tokenValid': tokenValid,
+      'needsRefresh': hasToken && !tokenValid,
+    };
+  }
+
+  // ✅ Create headers for multipart requests (for file uploads)
+  static Future<Map<String, String>> getMultipartHeaders() async {
+    final token = await getStoredToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+    
+    return {
+      'Authorization': 'Bearer $token',
+    };
   }
 }

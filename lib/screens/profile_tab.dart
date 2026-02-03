@@ -236,7 +236,12 @@ class _ProfileTabState extends State<ProfileTab> {
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 1024,
+      maxHeight: 1024,
+    );
     
     if (pickedFile != null && mounted) {
       setState(() {
@@ -244,30 +249,29 @@ class _ProfileTabState extends State<ProfileTab> {
       });
       
       try {
-        // Read the file as bytes (works for both web and mobile)
         final bytes = await pickedFile.readAsBytes();
         final fileName = pickedFile.name;
         
-        // Store for UI preview
-        setState(() {
-          _profileImageBytes = bytes;
-          _profileImageName = fileName;
-        });
+        // Validate image size (max 5MB)
+        if (bytes.length > 5 * 1024 * 1024) {
+          if (mounted) {
+            setState(() => _isUploadingImage = false);
+            _showErrorDialog('Image Too Large', 'Please select an image smaller than 5MB');
+          }
+          return;
+        }
         
-        // Create a temporary file for the upload service
-        File imageFile;
-        if (kIsWeb) {
-          // For web, we need to create a file differently
-          // Create a temporary file in memory
-          imageFile = File.fromRawPath(bytes);
-        } else {
-          // For mobile, create file from path
-          imageFile = File(pickedFile.path);
+        // Store for UI preview
+        if (mounted) {
+          setState(() {
+            _profileImageBytes = bytes;
+            _profileImageName = fileName;
+          });
         }
         
         // Upload the image
         final result = await ProfileService.uploadProfilePic(
-          imageFile: imageFile,
+          imageFile: kIsWeb ? null : File(pickedFile.path),
           fileName: fileName,
           bytes: bytes,
         );
@@ -278,13 +282,14 @@ class _ProfileTabState extends State<ProfileTab> {
         if (result['success'] == true) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result['message']),
+              content: Text(result['message'] ?? 'Profile picture updated'),
               backgroundColor: const Color(0xFF00C853),
+              duration: const Duration(seconds: 3),
             ),
           );
           await _loadProfileData();
         } else {
-          _showErrorDialog('Upload Failed', _parseErrorMessage(result['message']));
+          _showErrorDialog('Upload Failed', _parseErrorMessage(result['message'] ?? 'Upload failed'));
         }
       } catch (e) {
         if (!mounted) return;
