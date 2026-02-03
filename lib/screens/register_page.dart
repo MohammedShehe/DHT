@@ -75,35 +75,66 @@ class _RegisterPageState extends State<RegisterPage> {
     if (_formKey.currentState!.validate() && _termsAccepted) {
       setState(() => _isLoading = true);
       
-      final result = await AuthService.register(
-        fullName: _nameController.text,
-        email: _emailController.text,
-        password: _passwordController.text,
-        confirmPassword: _confirmPasswordController.text,
-      );
-      
-      if (mounted) {
-        setState(() => _isLoading = false);
+      try {
+        final result = await AuthService.register(
+          fullName: _nameController.text,
+          email: _emailController.text,
+          password: _passwordController.text,
+          confirmPassword: _confirmPasswordController.text,
+        );
         
-        if (result['success'] == true) {
-          // Show success message
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message']),
-              backgroundColor: Colors.green,
-            ),
-          );
+        if (mounted) {
+          setState(() => _isLoading = false);
           
-          // Navigate to permission page
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const PermissionPage()),
-          );
-        } else {
-          // Show error message
+          if (result['success'] == true) {
+            // ✅ Store the token returned from registration
+            if (result['token'] != null) {
+              await AuthService.storeToken(result['token']);
+              
+              // Show success message
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(result['message']),
+                  backgroundColor: Colors.green,
+                ),
+              );
+              
+              // Navigate to permission page
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const PermissionPage()),
+                (route) => false,
+              );
+            } else {
+              // If no token is returned, redirect to login
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Registration successful! Please login.'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginPage()),
+                (route) => false,
+              );
+            }
+          } else {
+            // Show error message
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(result['message']),
+                backgroundColor: Colors.red[400],
+              ),
+            );
+          }
+        }
+      } catch (error) {
+        if (mounted) {
+          setState(() => _isLoading = false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result['message']),
+              content: Text('Registration failed: $error'),
               backgroundColor: Colors.red[400],
             ),
           );
@@ -152,6 +183,11 @@ class _RegisterPageState extends State<RegisterPage> {
         setState(() => _isLoading = false);
         
         if (result['success'] == true) {
+          // ✅ Store the token for Google login
+          if (result['token'] != null) {
+            await AuthService.storeToken(result['token']);
+          }
+          
           // Show success message
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -161,9 +197,10 @@ class _RegisterPageState extends State<RegisterPage> {
           );
           
           // Navigate to permission page
-          Navigator.push(
+          Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (_) => const PermissionPage()),
+            (route) => false,
           );
         } else {
           // Show error message
@@ -245,6 +282,10 @@ class _RegisterPageState extends State<RegisterPage> {
                     prefixIcon: const Icon(Icons.person_outline),
                     filled: true,
                     fillColor: Colors.grey[50],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
                   ),
                   textCapitalization: TextCapitalization.words,
                   inputFormatters: [
@@ -262,6 +303,10 @@ class _RegisterPageState extends State<RegisterPage> {
                     prefixIcon: const Icon(Icons.email_outlined),
                     filled: true,
                     fillColor: Colors.grey[50],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
                   ),
                   keyboardType: TextInputType.emailAddress,
                 ),
@@ -280,6 +325,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         _obscurePassword
                             ? Icons.visibility_off
                             : Icons.visibility,
+                        color: Colors.grey[600],
                       ),
                       onPressed: () {
                         setState(() => _obscurePassword = !_obscurePassword);
@@ -287,6 +333,10 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                     filled: true,
                     fillColor: Colors.grey[50],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -304,6 +354,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         _obscureConfirmPassword
                             ? Icons.visibility_off
                             : Icons.visibility,
+                        color: Colors.grey[600],
                       ),
                       onPressed: () {
                         setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
@@ -311,12 +362,99 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                     filled: true,
                     fillColor: Colors.grey[50],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 8),
+                
+                // Password requirements hint
+                Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Password must contain:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            _passwordController.text.length >= 8 
+                              ? Icons.check_circle 
+                              : Icons.circle,
+                            size: 12,
+                            color: _passwordController.text.length >= 8 
+                              ? Colors.green 
+                              : Colors.grey,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'At least 8 characters',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Icon(
+                            _passwordController.text.contains(RegExp(r'[A-Z]'))
+                              ? Icons.check_circle 
+                              : Icons.circle,
+                            size: 12,
+                            color: _passwordController.text.contains(RegExp(r'[A-Z]'))
+                              ? Colors.green 
+                              : Colors.grey,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'One uppercase letter',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Icon(
+                            _passwordController.text.contains(RegExp(r'[0-9]'))
+                              ? Icons.check_circle 
+                              : Icons.circle,
+                            size: 12,
+                            color: _passwordController.text.contains(RegExp(r'[0-9]'))
+                              ? Colors.green 
+                              : Colors.grey,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'One number',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
 
                 // Terms and Conditions
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Checkbox(
                       value: _termsAccepted,
@@ -326,11 +464,29 @@ class _RegisterPageState extends State<RegisterPage> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(4),
                       ),
+                      activeColor: const Color(0xFF00C853),
                     ),
                     Expanded(
                       child: GestureDetector(
                         onTap: () {
-                          // TODO: Show terms and conditions
+                          // TODO: Show terms and conditions dialog
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Terms & Conditions'),
+                              content: const SingleChildScrollView(
+                                child: Text(
+                                  'By creating an account, you agree to our Terms of Service and Privacy Policy...',
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Close'),
+                                ),
+                              ],
+                            ),
+                          );
                         },
                         child: Text.rich(
                           TextSpan(
@@ -431,6 +587,8 @@ class _RegisterPageState extends State<RegisterPage> {
                       'assets/google_logo.png',
                       width: 24,
                       height: 24,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const Icon(Icons.g_mobiledata, size: 24),
                     ),
                     label: _isLoading
                         ? const SizedBox(

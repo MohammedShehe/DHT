@@ -86,10 +86,10 @@ class _LoginPageState extends State<LoginPage> {
       // Save remember me preference
       await _saveCredentials();
       
+      // UPDATED: Call login without rememberMe parameter
       final result = await AuthService.login(
         email: _emailController.text,
         password: _passwordController.text,
-        rememberMe: _rememberMe,
       );
       
       if (mounted) {
@@ -115,7 +115,7 @@ class _LoginPageState extends State<LoginPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(result['message']),
-              backgroundColor: Colors.red[400],
+              backgroundColor: Colors.red,
             ),
           );
         }
@@ -150,10 +150,9 @@ class _LoginPageState extends State<LoginPage> {
       // Save remember me preference for Google login
       await _saveCredentials();
       
-      // Call backend Google login endpoint
+      // UPDATED: Call googleLogin without rememberMe parameter
       final result = await AuthService.googleLogin(
         idToken: googleAuth.idToken!,
-        rememberMe: _rememberMe,
       );
       
       if (mounted) {
@@ -179,7 +178,7 @@ class _LoginPageState extends State<LoginPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(result['message']),
-              backgroundColor: Colors.red[400],
+              backgroundColor: Colors.red,
             ),
           );
         }
@@ -190,7 +189,7 @@ class _LoginPageState extends State<LoginPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Google sign-in failed: $e'),
-            backgroundColor: Colors.red[400],
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -263,11 +262,11 @@ class _LoginPageState extends State<LoginPage> {
                 TextFormField(
                   controller: _emailController,
                   validator: _validateEmail,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Email Address',
-                    prefixIcon: const Icon(Icons.email_outlined),
+                    prefixIcon: Icon(Icons.email_outlined),
                     filled: true,
-                    fillColor: Colors.grey[50],
+                    fillColor: Color(0xFFF8FDF9),
                   ),
                   keyboardType: TextInputType.emailAddress,
                 ),
@@ -292,7 +291,7 @@ class _LoginPageState extends State<LoginPage> {
                       },
                     ),
                     filled: true,
-                    fillColor: Colors.grey[50],
+                    fillColor: const Color(0xFFF8FDF9),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -311,6 +310,7 @@ class _LoginPageState extends State<LoginPage> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(4),
                           ),
+                          activeColor: const Color(0xFF00C853),
                         ),
                         Text(
                           'Remember me',
