@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'auth_service.dart';
 import '../utils/api_config.dart';
@@ -182,8 +182,12 @@ class ProfileService {
     }
   }
 
-  // Upload profile picture
-  static Future<Map<String, dynamic>> uploadProfilePic(File imageFile) async {
+  // Upload profile picture - UPDATED VERSION (works for both web and mobile)
+  static Future<Map<String, dynamic>> uploadProfilePic({
+    required File imageFile,
+    required String fileName,
+    required Uint8List bytes,
+  }) async {
     if (!await _checkNetwork()) {
       return {
         'success': false,
@@ -192,13 +196,8 @@ class ProfileService {
     }
 
     try {
-      final token = await AuthService.getStoredToken();
-      if (token == null) {
-        return {
-          'success': false,
-          'message': 'Not authenticated',
-        };
-      }
+      // Get auth headers with proper Authorization header
+      final headers = await AuthService.getAuthHeaders();
       
       // Create multipart request
       var request = http.MultipartRequest(
@@ -206,41 +205,67 @@ class ProfileService {
         Uri.parse('$baseUrl/profile/profile-pic'),
       );
 
-      // Add headers
-      request.headers.addAll({
-        'Authorization': 'Bearer $token',
-      });
-
-      // Add image file
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'image',
-          imageFile.path,
-          contentType: MediaType('image', 'jpeg'),
-        ),
+      // Copy the Authorization header from headers
+      request.headers['Authorization'] = headers['Authorization']!;
+      
+      // Get file extension
+      String extension = 'jpg';
+      final fileNameLower = fileName.toLowerCase();
+      if (fileNameLower.endsWith('.png')) {
+        extension = 'png';
+      } else if (fileNameLower.endsWith('.jpeg')) {
+        extension = 'jpeg';
+      } else if (fileNameLower.endsWith('.jpg')) {
+        extension = 'jpg';
+      }
+      
+      // Create multipart file from bytes
+      final multipartFile = http.MultipartFile.fromBytes(
+        'image', // This matches your multer configuration (upload.single('image'))
+        bytes,
+        filename: 'profile_pic_${DateTime.now().millisecondsSinceEpoch}.$extension',
       );
+      request.files.add(multipartFile);
 
       // Send request
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
-      final data = json.decode(response.body);
+      final responseBody = response.body;
       
       if (response.statusCode == 200) {
+        final data = json.decode(responseBody);
         return {
           'success': true,
-          'message': data['message'],
-          'imagePath': data['imagePath'],
+          'message': data['message'] ?? 'Profile picture updated',
         };
-      } else {
+      } else if (response.statusCode == 401) {
         return {
           'success': false,
-          'message': data['message'] ?? 'Failed to upload profile picture',
+          'message': 'Authentication failed. Please login again.',
         };
+      } else if (response.statusCode == 400) {
+        return {
+          'success': false,
+          'message': 'Invalid image file. Please select a valid image (JPEG, PNG).',
+        };
+      } else {
+        try {
+          final data = json.decode(responseBody);
+          return {
+            'success': false,
+            'message': data['message'] ?? 'Failed to upload profile picture',
+          };
+        } catch (e) {
+          return {
+            'success': false,
+            'message': 'Server error: ${response.reasonPhrase}',
+          };
+        }
       }
     } catch (e) {
       return {
         'success': false,
-        'message': 'Connection error: $e',
+        'message': 'Upload failed: ${e.toString()}',
       };
     }
   }

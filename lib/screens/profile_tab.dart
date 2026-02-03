@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import '../services/auth_service.dart';
 import '../services/profile_service.dart';
 import '../services/account_service.dart';
@@ -30,37 +31,27 @@ class _ProfileTabState extends State<ProfileTab> {
   bool _notificationsEnabled = true;
   bool _dataSyncEnabled = true;
   
-  // Password fields
+  // Form controllers
   final TextEditingController _currentPasswordController = TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
-  
-  // Account deletion fields
   final TextEditingController _deletePasswordController = TextEditingController();
   final TextEditingController _deleteOtpController = TextEditingController();
-  
-  // Email change fields
   final TextEditingController _newEmailController = TextEditingController();
   final TextEditingController _emailOtpController = TextEditingController();
 
-  // Profile Image
-  File? _profileImage;
+  // UI State
+  Uint8List? _profileImageBytes;
+  String? _profileImageName;
   bool _isLoading = true;
-
-  // Loading states for various actions
   bool _isUploadingImage = false;
   bool _isChangingPassword = false;
-  bool _isUpdatingName = false;
-  bool _isChangingEmail = false;
-  bool _isVerifyingEmailOtp = false;
   bool _isLoggingOut = false;
-  bool _isRequestingAccountDeletion = false;
-  bool _isConfirmingAccountDeletion = false;
   bool _isSyncingWearable = false;
   bool _isExportingData = false;
 
   // Health Stats
-  Map<String, dynamic> healthStats = {
+  final Map<String, dynamic> healthStats = {
     'streak': 0,
     'points': 0,
     'level': 'Bronze',
@@ -82,164 +73,164 @@ class _ProfileTabState extends State<ProfileTab> {
     });
   }
 
+  @override
+  void dispose() {
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    _deletePasswordController.dispose();
+    _deleteOtpController.dispose();
+    _newEmailController.dispose();
+    _emailOtpController.dispose();
+    super.dispose();
+  }
+
+  // Helper method to show error dialog
+  void _showErrorDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Helper method to parse error messages
+  String _parseErrorMessage(String message) {
+    final lowerMessage = message.toLowerCase();
+    
+    if (lowerMessage.contains('already registered') || lowerMessage.contains('already in use')) {
+      return 'This email is already in use. Please use a different email.';
+    } else if (lowerMessage.contains('same as current')) {
+      return 'This is already your current email. Please enter a new email address.';
+    } else if (lowerMessage.contains('invalid email')) {
+      return 'Please enter a valid email address.';
+    } else if (lowerMessage.contains('incorrect password') || lowerMessage.contains('invalid password')) {
+      return 'Incorrect password. Please try again.';
+    } else if (lowerMessage.contains('otp') && lowerMessage.contains('invalid')) {
+      return 'Invalid or expired OTP. Please try again.';
+    } else if (lowerMessage.contains('connection') || lowerMessage.contains('network')) {
+      return 'No internet connection. Please check your network and try again.';
+    } else if (lowerMessage.contains('token') || lowerMessage.contains('session') || lowerMessage.contains('unauthorized')) {
+      return 'Session expired. Please login again.';
+    }
+    
+    return message;
+  }
+
   Future<void> _loadProfileData() async {
     if (!mounted) return;
     
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
     
-    final result = await ProfileService.getProfile();
-    
-    if (!mounted) return;
-    
-    if (result['success'] == true) {
-      final profile = result['profile'];
-      setState(() {
-        fullName = profile['full_name'] ?? "No Name";
-        email = profile['email'] ?? "No Email";
-        profilePic = profile['profile_pic'] ?? "";
-      });
-    } else {
-      // Check if it's an auth error
-      final message = result['message']?.toString().toLowerCase() ?? '';
-      if (message.contains('token') || 
-          message.contains('unauthorized') ||
-          message.contains('expired')) {
-        // Token expired or invalid - show message but don't auto-navigate
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Session expired. Please logout and login again.'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-            action: SnackBarAction(
-              label: 'Logout',
-              onPressed: () {
-                _performLogout();
-              },
-            ),
-          ),
-        );
+    try {
+      final result = await ProfileService.getProfile();
+      
+      if (!mounted) return;
+      
+      if (result['success'] == true) {
+        final profile = result['profile'];
+        setState(() {
+          fullName = profile['full_name'] ?? "No Name";
+          email = profile['email'] ?? "No Email";
+          profilePic = profile['profile_pic'] ?? "";
+        });
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Failed to load profile'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        final message = result['message']?.toString().toLowerCase() ?? '';
+        if (message.contains('token') || message.contains('unauthorized') || message.contains('expired')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Session expired. Please login again.'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Logout',
+                onPressed: _performLogout,
+              ),
+            ),
+          );
+        } else {
+          _showErrorDialog('Error', _parseErrorMessage(result['message'] ?? 'Failed to load profile'));
+        }
       }
+    } catch (e) {
+      if (!mounted) return;
+      _showErrorDialog('Error', 'Failed to load profile: ${e.toString()}');
     }
     
     if (!mounted) return;
-    
-    setState(() {
-      _isLoading = false;
-    });
+    setState(() => _isLoading = false);
   }
 
   Future<void> _performLogout() async {
     if (!mounted) return;
     
-    setState(() {
-      _isLoggingOut = true;
-    });
+    setState(() => _isLoggingOut = true);
     
     try {
       final result = await AccountService.logout();
       
       if (!mounted) return;
-      
-      setState(() {
-        _isLoggingOut = false;
-      });
+      setState(() => _isLoggingOut = false);
       
       if (result['success'] == true) {
-        // Clear all navigation history and go to login screen
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => LoginPage()),
+          MaterialPageRoute(builder: (context) => const LoginPage()),
           (route) => false,
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Logout failed'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showErrorDialog('Logout Failed', _parseErrorMessage(result['message'] ?? 'Logout failed'));
       }
     } catch (e) {
       if (!mounted) return;
-      
-      setState(() {
-        _isLoggingOut = false;
-      });
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('An error occurred during logout'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      setState(() => _isLoggingOut = false);
+      _showErrorDialog('Error', 'An error occurred during logout');
     }
   }
 
   Future<void> _performAccountDeletion(String otp) async {
     if (!mounted) return;
     
-    setState(() {
-      _isConfirmingAccountDeletion = true;
-    });
+    setState(() => _isLoggingOut = true);
     
     try {
       final result = await AccountService.confirmDeleteAccount(otp);
       
       if (!mounted) return;
-      
-      setState(() {
-        _isConfirmingAccountDeletion = false;
-      });
+      setState(() => _isLoggingOut = false);
       
       if (result['success'] == true) {
         _deletePasswordController.clear();
         _deleteOtpController.clear();
         
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Account deleted successfully'),
-            backgroundColor: const Color(0xFF00C853),
+          const SnackBar(
+            content: Text('Account deleted successfully'),
+            backgroundColor: Color(0xFF00C853),
           ),
         );
         
-        // Navigate to login screen after successful deletion
         await Future.delayed(const Duration(milliseconds: 1500));
         
         if (!mounted) return;
-        
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => LoginPage()),
+          MaterialPageRoute(builder: (context) => const LoginPage()),
           (route) => false,
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Account deletion failed'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showErrorDialog('Deletion Failed', _parseErrorMessage(result['message'] ?? 'Account deletion failed'));
       }
     } catch (e) {
       if (!mounted) return;
-      
-      setState(() {
-        _isConfirmingAccountDeletion = false;
-      });
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('An error occurred during account deletion'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      setState(() => _isLoggingOut = false);
+      _showErrorDialog('Error', 'An error occurred during account deletion');
     }
   }
 
@@ -249,34 +240,56 @@ class _ProfileTabState extends State<ProfileTab> {
     
     if (pickedFile != null && mounted) {
       setState(() {
-        _profileImage = File(pickedFile.path);
         _isUploadingImage = true;
       });
       
-      // Upload to server
-      final result = await ProfileService.uploadProfilePic(_profileImage!);
-      if (!mounted) return;
-      
-      setState(() {
-        _isUploadingImage = false;
-      });
-      
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message']),
-            backgroundColor: const Color(0xFF00C853),
-          ),
+      try {
+        // Read the file as bytes (works for both web and mobile)
+        final bytes = await pickedFile.readAsBytes();
+        final fileName = pickedFile.name;
+        
+        // Store for UI preview
+        setState(() {
+          _profileImageBytes = bytes;
+          _profileImageName = fileName;
+        });
+        
+        // Create a temporary file for the upload service
+        File imageFile;
+        if (kIsWeb) {
+          // For web, we need to create a file differently
+          // Create a temporary file in memory
+          imageFile = File.fromRawPath(bytes);
+        } else {
+          // For mobile, create file from path
+          imageFile = File(pickedFile.path);
+        }
+        
+        // Upload the image
+        final result = await ProfileService.uploadProfilePic(
+          imageFile: imageFile,
+          fileName: fileName,
+          bytes: bytes,
         );
-        // Reload profile to get updated image path
-        await _loadProfileData();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message']),
-            backgroundColor: Colors.red,
-          ),
-        );
+        
+        if (!mounted) return;
+        setState(() => _isUploadingImage = false);
+        
+        if (result['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message']),
+              backgroundColor: const Color(0xFF00C853),
+            ),
+          );
+          await _loadProfileData();
+        } else {
+          _showErrorDialog('Upload Failed', _parseErrorMessage(result['message']));
+        }
+      } catch (e) {
+        if (!mounted) return;
+        setState(() => _isUploadingImage = false);
+        _showErrorDialog('Error', 'Failed to upload image: ${e.toString()}');
       }
     }
   }
@@ -284,57 +297,48 @@ class _ProfileTabState extends State<ProfileTab> {
   void _showThemeDialog() {
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Select Theme'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: themeOptions.map((theme) {
-              return ListTile(
-                title: Text(theme),
-                trailing: _themeMode == ThemeMode.light && theme == 'Light' ||
-                        _themeMode == ThemeMode.dark && theme == 'Dark' ||
-                        _themeMode == ThemeMode.system && theme == 'System Default'
-                    ? const Icon(Icons.check, color: Color(0xFF00C853))
-                    : null,
-                onTap: () {
-                  setState(() {
-                    if (theme == 'Light') {
-                      _themeMode = ThemeMode.light;
-                      _darkMode = false;
-                    } else if (theme == 'Dark') {
-                      _themeMode = ThemeMode.dark;
-                      _darkMode = true;
-                    } else {
-                      _themeMode = ThemeMode.system;
-                      _darkMode = MediaQuery.of(context).platformBrightness == Brightness.dark;
-                    }
-                  });
-                  Navigator.pop(context);
-                },
-              );
-            }).toList(),
-          ),
-        );
-      },
+      builder: (context) => AlertDialog(
+        title: const Text('Select Theme'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: themeOptions.map((theme) {
+            final isSelected = (theme == 'Light' && _themeMode == ThemeMode.light) ||
+                (theme == 'Dark' && _themeMode == ThemeMode.dark) ||
+                (theme == 'System Default' && _themeMode == ThemeMode.system);
+            
+            return ListTile(
+              title: Text(theme),
+              trailing: isSelected ? const Icon(Icons.check, color: Color(0xFF00C853)) : null,
+              onTap: () {
+                setState(() {
+                  if (theme == 'Light') {
+                    _themeMode = ThemeMode.light;
+                    _darkMode = false;
+                  } else if (theme == 'Dark') {
+                    _themeMode = ThemeMode.dark;
+                    _darkMode = true;
+                  } else {
+                    _themeMode = ThemeMode.system;
+                    _darkMode = MediaQuery.of(context).platformBrightness == Brightness.dark;
+                  }
+                });
+                Navigator.pop(context);
+              },
+            );
+          }).toList(),
+        ),
+      ),
     );
   }
 
   Future<void> _exportData(String type) async {
     if (!mounted) return;
     
-    setState(() {
-      _isExportingData = true;
-    });
-    
-    // TODO: Implement real export logic
-    await Future.delayed(const Duration(seconds: 2)); // Simulate API call
+    setState(() => _isExportingData = true);
+    await Future.delayed(const Duration(seconds: 2));
     
     if (!mounted) return;
-    
-    setState(() {
-      _isExportingData = false;
-    });
+    setState(() => _isExportingData = false);
     
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -347,240 +351,207 @@ class _ProfileTabState extends State<ProfileTab> {
   Future<void> _syncWithWearable() async {
     if (!mounted) return;
     
-    setState(() {
-      _isSyncingWearable = true;
-    });
-    
-    // TODO: Implement wearable sync
-    await Future.delayed(const Duration(seconds: 2)); // Simulate API call
+    setState(() => _isSyncingWearable = true);
+    await Future.delayed(const Duration(seconds: 2));
     
     if (!mounted) return;
-    
-    setState(() {
-      _isSyncingWearable = false;
-    });
+    setState(() => _isSyncingWearable = false);
     
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Successfully synced with wearable devices!'),
-        backgroundColor: Color(0xFF00C853),
+        backgroundColor: const Color(0xFF00C853),
       ),
     );
   }
 
   Future<void> _changePassword() async {
+    // Validation
     if (_newPasswordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Passwords do not match'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showErrorDialog('Error', 'Passwords do not match');
       return;
     }
     
     if (_newPasswordController.text.isEmpty ||
         _currentPasswordController.text.isEmpty ||
         _confirmPasswordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please fill all password fields'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showErrorDialog('Error', 'Please fill all password fields');
       return;
     }
     
-    setState(() {
-      _isChangingPassword = true;
-    });
+    if (_newPasswordController.text.length < 6) {
+      _showErrorDialog('Error', 'Password must be at least 6 characters long');
+      return;
+    }
     
-    final result = await ProfileService.changePassword(
-      currentPassword: _currentPasswordController.text,
-      newPassword: _newPasswordController.text,
-      confirmPassword: _confirmPasswordController.text,
-    );
+    setState(() => _isChangingPassword = true);
     
-    if (!mounted) return;
-    
-    setState(() {
-      _isChangingPassword = false;
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(result['message']),
-        backgroundColor: result['success'] == true ? const Color(0xFF00C853) : Colors.red,
-      ),
-    );
-    
-    if (result['success'] == true) {
-      _currentPasswordController.clear();
-      _newPasswordController.clear();
-      _confirmPasswordController.clear();
+    try {
+      final result = await ProfileService.changePassword(
+        currentPassword: _currentPasswordController.text,
+        newPassword: _newPasswordController.text,
+        confirmPassword: _confirmPasswordController.text,
+      );
+      
+      if (!mounted) return;
+      setState(() => _isChangingPassword = false);
+      
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message']),
+            backgroundColor: const Color(0xFF00C853),
+          ),
+        );
+        _currentPasswordController.clear();
+        _newPasswordController.clear();
+        _confirmPasswordController.clear();
+      } else {
+        _showErrorDialog('Password Change Failed', _parseErrorMessage(result['message'] ?? 'Failed to change password'));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isChangingPassword = false);
+      _showErrorDialog('Error', 'Failed to change password');
     }
   }
 
   Future<void> _updateName() async {
-    showDialog(
+    final nameController = TextEditingController(text: fullName);
+    bool isUpdating = false;
+    
+    await showDialog(
       context: context,
-      builder: (context) {
-        final TextEditingController nameController = TextEditingController(text: fullName);
-        bool isUpdating = false;
-        
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Update Name'),
-              content: TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Full Name',
-                  border: OutlineInputBorder(),
-                ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Update Name'),
+          content: TextField(
+            controller: nameController,
+            decoration: const InputDecoration(
+              labelText: 'Full Name',
+              border: OutlineInputBorder(),
+            ),
+            maxLength: 50,
+          ),
+          actions: [
+            if (isUpdating)
+              const Center(child: CircularProgressIndicator())
+            else ...[
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
               ),
-              actions: [
-                if (isUpdating)
-                  const Center(child: CircularProgressIndicator())
-                else ...[
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () async {
-                      if (nameController.text.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Please enter a name'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                        return;
-                      }
-                      
-                      setState(() {
-                        isUpdating = true;
-                      });
-                      
-                      final result = await ProfileService.updateName(nameController.text);
-                      
-                      if (!mounted) return;
-                      
-                      if (result['success'] == true) {
-                        this.setState(() {
-                          fullName = nameController.text;
-                        });
-                        
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(result['message']),
-                            backgroundColor: const Color(0xFF00C853),
-                          ),
-                        );
-                        
-                        Navigator.pop(context);
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(result['message']),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                        setState(() {
-                          isUpdating = false;
-                        });
-                      }
-                    },
-                    child: const Text('Update'),
-                  ),
-                ]
-              ],
-            );
-          },
-        );
-      },
+              ElevatedButton(
+                onPressed: () async {
+                  if (nameController.text.isEmpty) {
+                    _showErrorDialog('Error', 'Please enter a name');
+                    return;
+                  }
+                  
+                  setState(() => isUpdating = true);
+                  
+                  final result = await ProfileService.updateName(nameController.text);
+                  
+                  if (!mounted) return;
+                  
+                  if (result['success'] == true) {
+                    this.setState(() => fullName = nameController.text);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(result['message']),
+                        backgroundColor: const Color(0xFF00C853),
+                      ),
+                    );
+                    Navigator.pop(context);
+                  } else {
+                    _showErrorDialog('Update Failed', _parseErrorMessage(result['message'] ?? 'Failed to update name'));
+                    setState(() => isUpdating = false);
+                  }
+                },
+                child: const Text('Update'),
+              ),
+            ]
+          ],
+        ),
+      ),
     );
   }
 
   void _requestEmailChange() {
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    
     showDialog(
       context: context,
       builder: (context) {
         bool isSendingOtp = false;
         
         return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Change Email'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: _newEmailController,
-                    decoration: const InputDecoration(
-                      labelText: 'New Email',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.emailAddress,
+          builder: (context, setState) => AlertDialog(
+            title: const Text('Change Email'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _newEmailController,
+                  decoration: const InputDecoration(
+                    labelText: 'New Email',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.email),
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'An OTP will be sent to your new email for verification.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-              actions: [
-                if (isSendingOtp)
-                  const Center(child: CircularProgressIndicator())
-                else ...[
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () async {
-                      if (_newEmailController.text.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Please enter a new email'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                        return;
-                      }
-                      
-                      setState(() {
-                        isSendingOtp = true;
-                      });
-                      
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'An OTP will be sent to your new email for verification.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+            actions: [
+              if (isSendingOtp)
+                const Center(child: CircularProgressIndicator())
+              else ...[
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (_newEmailController.text.isEmpty) {
+                      _showErrorDialog('Error', 'Please enter a new email');
+                      return;
+                    }
+                    
+                    if (!emailRegex.hasMatch(_newEmailController.text)) {
+                      _showErrorDialog('Error', 'Please enter a valid email address');
+                      return;
+                    }
+                    
+                    setState(() => isSendingOtp = true);
+                    
+                    try {
                       final result = await ProfileService.requestEmailChange(_newEmailController.text);
                       
                       if (!mounted) return;
-                      
-                      setState(() {
-                        isSendingOtp = false;
-                      });
-                      
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(result['message']),
-                          backgroundColor: result['success'] == true ? const Color(0xFF00C853) : Colors.red,
-                        ),
-                      );
+                      setState(() => isSendingOtp = false);
                       
                       if (result['success'] == true) {
                         Navigator.pop(context);
                         _showEmailOtpDialog();
+                      } else {
+                        _showErrorDialog('Email Change Failed', _parseErrorMessage(result['message'] ?? 'Failed to send OTP'));
                       }
-                    },
-                    child: const Text('Send OTP'),
-                  ),
-                ]
-              ],
-            );
-          },
+                    } catch (e) {
+                      if (!mounted) return;
+                      setState(() => isSendingOtp = false);
+                      _showErrorDialog('Error', 'Failed to send OTP');
+                    }
+                  },
+                  child: const Text('Send OTP'),
+                ),
+              ]
+            ],
+          ),
         );
       },
     );
@@ -593,123 +564,119 @@ class _ProfileTabState extends State<ProfileTab> {
         bool isVerifying = false;
         
         return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Verify OTP'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: _emailOtpController,
-                    decoration: const InputDecoration(
-                      labelText: 'Enter OTP',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
+          builder: (context, setState) => AlertDialog(
+            title: const Text('Verify OTP'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _emailOtpController,
+                  decoration: const InputDecoration(
+                    labelText: 'Enter OTP',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lock),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Check your new email for the OTP',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-              actions: [
-                if (isVerifying)
-                  const Center(child: CircularProgressIndicator())
-                else ...[
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () async {
-                      if (_emailOtpController.text.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Please enter OTP'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                        return;
-                      }
-                      
-                      setState(() {
-                        isVerifying = true;
-                      });
-                      
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Check your new email for the 6-digit OTP',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+            actions: [
+              if (isVerifying)
+                const Center(child: CircularProgressIndicator())
+              else ...[
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (_emailOtpController.text.isEmpty) {
+                      _showErrorDialog('Error', 'Please enter OTP');
+                      return;
+                    }
+                    
+                    if (_emailOtpController.text.length != 6) {
+                      _showErrorDialog('Error', 'OTP must be 6 digits');
+                      return;
+                    }
+                    
+                    setState(() => isVerifying = true);
+                    
+                    try {
                       final result = await ProfileService.confirmEmailChange(_emailOtpController.text);
                       
                       if (!mounted) return;
-                      
-                      setState(() {
-                        isVerifying = false;
-                      });
-                      
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(result['message']),
-                          backgroundColor: result['success'] == true ? const Color(0xFF00C853) : Colors.red,
-                        ),
-                      );
+                      setState(() => isVerifying = false);
                       
                       if (result['success'] == true) {
-                        setState(() {
-                          email = _newEmailController.text;
-                        });
+                        setState(() => email = _newEmailController.text);
                         _newEmailController.clear();
                         _emailOtpController.clear();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(result['message']),
+                            backgroundColor: const Color(0xFF00C853),
+                          ),
+                        );
                         Navigator.pop(context);
+                      } else {
+                        _showErrorDialog('Verification Failed', _parseErrorMessage(result['message'] ?? 'Failed to verify OTP'));
                       }
-                    },
-                    child: const Text('Verify'),
-                  ),
-                ]
-              ],
-            );
-          },
+                    } catch (e) {
+                      if (!mounted) return;
+                      setState(() => isVerifying = false);
+                      _showErrorDialog('Error', 'Failed to verify OTP');
+                    }
+                  },
+                  child: const Text('Verify'),
+                ),
+              ]
+            ],
+          ),
         );
       },
     );
   }
 
-  Future<void> _logout() async {
+  void _logout() {
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: const Text('Logout'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Are you sure you want to logout?'),
-                if (_isLoggingOut) ...[
-                  const SizedBox(height: 16),
-                  const CircularProgressIndicator(),
-                ]
-              ],
-            ),
-            actions: _isLoggingOut
-                ? []
-                : [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () async {
-                        Navigator.pop(context); // Close the dialog
-                        await _performLogout();
-                      },
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.red,
-                      ),
-                      child: const Text('Logout'),
-                    ),
-                  ],
-          );
-        },
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Logout'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Are you sure you want to logout?'),
+              if (_isLoggingOut) ...[
+                const SizedBox(height: 16),
+                const CircularProgressIndicator(),
+              ]
+            ],
+          ),
+          actions: _isLoggingOut
+              ? []
+              : [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      await _performLogout();
+                    },
+                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    child: const Text('Logout'),
+                  ),
+                ],
+        ),
       ),
     );
   }
@@ -721,84 +688,74 @@ class _ProfileTabState extends State<ProfileTab> {
         bool isRequesting = false;
         
         return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Delete Account'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'This action cannot be undone. All your data will be permanently deleted.',
-                    style: TextStyle(color: Colors.red),
-                  ),
-                  if (isRequesting) ...[
-                    const SizedBox(height: 16),
-                    const CircularProgressIndicator(),
-                  ] else ...[
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _deletePasswordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Enter your password',
-                        border: OutlineInputBorder(),
-                      ),
+          builder: (context, setState) => AlertDialog(
+            title: const Text('Delete Account'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'This action cannot be undone. All your data will be permanently deleted.',
+                  style: TextStyle(color: Colors.red),
+                ),
+                if (isRequesting) ...[
+                  const SizedBox(height: 16),
+                  const CircularProgressIndicator(),
+                ] else ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _deletePasswordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Enter your password',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.lock),
                     ),
-                  ]
-                ],
-              ),
-              actions: isRequesting
-                  ? []
-                  : [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () async {
-                          if (_deletePasswordController.text.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Please enter your password'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                            return;
-                          }
-                          
-                          setState(() {
-                            isRequesting = true;
-                          });
-                          
+                  ),
+                ]
+              ],
+            ),
+            actions: isRequesting
+                ? []
+                : [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        if (_deletePasswordController.text.isEmpty) {
+                          _showErrorDialog('Error', 'Please enter your password');
+                          return;
+                        }
+                        
+                        setState(() => isRequesting = true);
+                        
+                        try {
                           final result = await AccountService.requestDeleteAccount(_deletePasswordController.text);
                           
                           if (!mounted) return;
-                          
-                          setState(() {
-                            isRequesting = false;
-                          });
-                          
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(result['message']),
-                              backgroundColor: result['success'] == true ? const Color(0xFF00C853) : Colors.red,
-                            ),
-                          );
+                          setState(() => isRequesting = false);
                           
                           if (result['success'] == true) {
                             Navigator.pop(context);
                             _showDeleteOtpDialog();
+                          } else {
+                            _showErrorDialog('Deletion Failed', _parseErrorMessage(result['message'] ?? 'Failed to request deletion'));
                           }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: const Text('Request Deletion'),
+                        } catch (e) {
+                          if (!mounted) return;
+                          setState(() => isRequesting = false);
+                          _showErrorDialog('Error', 'Failed to request deletion');
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
                       ),
-                    ],
-            );
-          },
+                      child: const Text('Request Deletion'),
+                    ),
+                  ],
+          ),
         );
       },
     );
@@ -811,72 +768,68 @@ class _ProfileTabState extends State<ProfileTab> {
         bool isConfirming = false;
         
         return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Confirm Deletion'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Check your email for the OTP to confirm account deletion.',
-                    style: TextStyle(color: Colors.red),
-                  ),
-                  if (isConfirming) ...[
-                    const SizedBox(height: 16),
-                    const CircularProgressIndicator(),
-                  ] else ...[
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _deleteOtpController,
-                      decoration: const InputDecoration(
-                        labelText: 'Enter OTP',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
+          builder: (context, setState) => AlertDialog(
+            title: const Text('Confirm Deletion'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Check your email for the OTP to confirm account deletion.',
+                  style: TextStyle(color: Colors.red),
+                ),
+                if (isConfirming) ...[
+                  const SizedBox(height: 16),
+                  const CircularProgressIndicator(),
+                ] else ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _deleteOtpController,
+                    decoration: const InputDecoration(
+                      labelText: 'Enter OTP',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.lock),
                     ),
-                  ]
-                ],
-              ),
-              actions: isConfirming
-                  ? []
-                  : [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                  ),
+                ]
+              ],
+            ),
+            actions: isConfirming
+                ? []
+                : [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        if (_deleteOtpController.text.isEmpty) {
+                          _showErrorDialog('Error', 'Please enter OTP');
+                          return;
+                        }
+                        
+                        if (_deleteOtpController.text.length != 6) {
+                          _showErrorDialog('Error', 'OTP must be 6 digits');
+                          return;
+                        }
+                        
+                        setState(() => isConfirming = true);
+                        await _performAccountDeletion(_deleteOtpController.text);
+                        
+                        if (!mounted) return;
+                        if (!isConfirming) {
+                          Navigator.pop(context);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
                       ),
-                      ElevatedButton(
-                        onPressed: () async {
-                          if (_deleteOtpController.text.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Please enter OTP'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                            return;
-                          }
-                          
-                          setState(() {
-                            isConfirming = true;
-                          });
-                          
-                          await _performAccountDeletion(_deleteOtpController.text);
-                          
-                          if (!mounted) return;
-                          
-                          if (!isConfirming) {
-                            Navigator.pop(context);
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: const Text('Delete Account'),
-                      ),
-                    ],
-            );
-          },
+                      child: const Text('Delete Account'),
+                    ),
+                  ],
+          ),
         );
       },
     );
@@ -903,11 +856,7 @@ class _ProfileTabState extends State<ProfileTab> {
             children: [
               CircleAvatar(
                 radius: 50,
-                backgroundImage: _profileImage != null
-                    ? FileImage(_profileImage!) as ImageProvider
-                    : (profilePic.isNotEmpty
-                        ? NetworkImage('${ApiConfig.baseUrl.replaceAll('/api', '')}/$profilePic') as ImageProvider
-                        : const AssetImage('default_avatar.jpg')),
+                backgroundImage: _getProfileImage(),
                 backgroundColor: Colors.white,
               ),
               if (_isUploadingImage)
@@ -984,12 +933,33 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
+  ImageProvider _getProfileImage() {
+    // If we have a newly selected image, show it
+    if (_profileImageBytes != null) {
+      return MemoryImage(_profileImageBytes!);
+    }
+    
+    // If we have a saved profile picture from server
+    if (profilePic.isNotEmpty) {
+      String imageUrl = profilePic;
+      
+      // Check if it's a full URL or relative path
+      if (!profilePic.startsWith('http')) {
+        // Construct full URL from base URL
+        imageUrl = '${ApiConfig.baseUrl.replaceAll('/api', '')}/$profilePic';
+      }
+      
+      return NetworkImage(imageUrl) as ImageProvider;
+    }
+    
+    // Default avatar
+    return const AssetImage('assets/default_avatar.jpg');
+  }
+
   Widget _buildStatCard(String title, String value, IconData icon, Color color) {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -1026,7 +996,13 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  Widget _buildSettingItem(IconData icon, String title, String subtitle, Widget trailing, {VoidCallback? onTap}) {
+  Widget _buildSettingItem({
+    required IconData icon,
+    required String title,
+    String subtitle = '',
+    required Widget trailing,
+    VoidCallback? onTap,
+  }) {
     return ListTile(
       leading: Container(
         width: 40,
@@ -1037,43 +1013,84 @@ class _ProfileTabState extends State<ProfileTab> {
         ),
         child: Icon(icon, color: const Color(0xFF00C853), size: 20),
       ),
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontWeight: FontWeight.w500,
-          fontSize: 16,
-        ),
-      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16)),
       subtitle: subtitle.isNotEmpty
-          ? Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
-            )
+          ? Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey[600]))
           : null,
       trailing: trailing,
       onTap: onTap,
     );
   }
 
+  Widget _buildSecuritySection() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            TextFormField(
+              controller: _currentPasswordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Current Password',
+                prefixIcon: Icon(Icons.lock_outline),
+                filled: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _newPasswordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'New Password',
+                prefixIcon: Icon(Icons.lock_outline),
+                filled: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _confirmPasswordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Confirm New Password',
+                prefixIcon: Icon(Icons.lock_outline),
+                filled: true,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isChangingPassword ? null : _changePassword,
+                child: _isChangingPassword
+                    ? const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+                          SizedBox(width: 8),
+                          Text('Changing Password...'),
+                        ],
+                      )
+                    : const Text('Change Password'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          color: Color(0xFF00C853),
-        ),
-      );
+      return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Profile',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
+        title: const Text('Profile', style: TextStyle(fontWeight: FontWeight.w600)),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -1086,7 +1103,6 @@ class _ProfileTabState extends State<ProfileTab> {
           children: [
             _buildProfileHeader(),
             
-            // Health Stats Grid
             Padding(
               padding: const EdgeInsets.all(16),
               child: GridView.count(
@@ -1097,35 +1113,14 @@ class _ProfileTabState extends State<ProfileTab> {
                 mainAxisSpacing: 16,
                 crossAxisSpacing: 16,
                 children: [
-                  _buildStatCard(
-                    'Day Streak',
-                    '${healthStats['streak']}',
-                    Icons.local_fire_department,
-                    Colors.orange,
-                  ),
-                  _buildStatCard(
-                    'Total Points',
-                    '${healthStats['points']}',
-                    Icons.star,
-                    Colors.amber,
-                  ),
-                  _buildStatCard(
-                    'Calories Burned',
-                    '${healthStats['caloriesBurned']}',
-                    Icons.whatshot,
-                    Colors.red,
-                  ),
-                  _buildStatCard(
-                    'Steps',
-                    '${healthStats['steps']}',
-                    Icons.directions_walk,
-                    Colors.blue,
-                  ),
+                  _buildStatCard('Day Streak', '${healthStats['streak']}', Icons.local_fire_department, Colors.orange),
+                  _buildStatCard('Total Points', '${healthStats['points']}', Icons.star, Colors.amber),
+                  _buildStatCard('Calories Burned', '${healthStats['caloriesBurned']}', Icons.whatshot, Colors.red),
+                  _buildStatCard('Steps', '${healthStats['steps']}', Icons.directions_walk, Colors.blue),
                 ],
               ),
             ),
 
-            // Settings Section
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -1133,129 +1128,92 @@ class _ProfileTabState extends State<ProfileTab> {
                 children: [
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      'Account Settings',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: Text('Account Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                   ),
                   Card(
                     elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     child: Column(
                       children: [
                         _buildSettingItem(
-                          Icons.person,
-                          'Personal Information',
-                          'Update your profile details',
-                          IconButton(
-                            icon: const Icon(Icons.edit, size: 20),
-                            onPressed: _updateName,
-                          ),
+                          icon: Icons.person,
+                          title: 'Personal Information',
+                          subtitle: 'Update your profile details',
+                          trailing: IconButton(icon: const Icon(Icons.edit, size: 20), onPressed: _updateName),
                           onTap: _updateName,
                         ),
                         const Divider(height: 1),
                         _buildSettingItem(
-                          Icons.email,
-                          'Change Email',
-                          'Update your email address',
-                          IconButton(
-                            icon: const Icon(Icons.chevron_right, size: 20),
-                            onPressed: _requestEmailChange,
-                          ),
+                          icon: Icons.email,
+                          title: 'Change Email',
+                          subtitle: 'Update your email address',
+                          trailing: IconButton(icon: const Icon(Icons.chevron_right, size: 20), onPressed: _requestEmailChange),
                           onTap: _requestEmailChange,
                         ),
                         const Divider(height: 1),
                         _buildSettingItem(
-                          Icons.language,
-                          'Language',
-                          _language,
-                          DropdownButtonHideUnderline(
+                          icon: Icons.language,
+                          title: 'Language',
+                          subtitle: _language,
+                          trailing: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
                               value: _language,
-                              items: languages.map((lang) {
-                                return DropdownMenuItem(
-                                  value: lang,
-                                  child: Text(lang),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
-                                setState(() => _language = value!);
-                              },
+                              items: languages.map((lang) => DropdownMenuItem(value: lang, child: Text(lang))).toList(),
+                              onChanged: (value) => setState(() => _language = value!),
                             ),
                           ),
                         ),
                         const Divider(height: 1),
                         _buildSettingItem(
-                          Icons.palette,
-                          'Theme',
-                          themeOptions[_themeMode == ThemeMode.light ? 0 : _themeMode == ThemeMode.dark ? 1 : 2],
-                          IconButton(
-                            icon: const Icon(Icons.chevron_right, size: 20),
-                            onPressed: _showThemeDialog,
-                          ),
+                          icon: Icons.palette,
+                          title: 'Theme',
+                          subtitle: themeOptions[_themeMode == ThemeMode.light ? 0 : _themeMode == ThemeMode.dark ? 1 : 2],
+                          trailing: IconButton(icon: const Icon(Icons.chevron_right, size: 20), onPressed: _showThemeDialog),
                           onTap: _showThemeDialog,
                         ),
                         const Divider(height: 1),
                         _buildSettingItem(
-                          Icons.science,
-                          'Measurement System',
-                          _measurementSystem,
-                          DropdownButtonHideUnderline(
+                          icon: Icons.science,
+                          title: 'Measurement System',
+                          subtitle: _measurementSystem,
+                          trailing: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
                               value: _measurementSystem,
-                              items: measurementSystems.map((system) {
-                                return DropdownMenuItem(
-                                  value: system,
-                                  child: Text(system),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
-                                setState(() => _measurementSystem = value!);
-                              },
+                              items: measurementSystems.map((system) => DropdownMenuItem(value: system, child: Text(system))).toList(),
+                              onChanged: (value) => setState(() => _measurementSystem = value!),
                             ),
                           ),
                         ),
                         const Divider(height: 1),
                         _buildSettingItem(
-                          Icons.fingerprint,
-                          'Biometric Login',
-                          'Use fingerprint or face ID',
-                          Switch(
+                          icon: Icons.fingerprint,
+                          title: 'Biometric Login',
+                          subtitle: 'Use fingerprint or face ID',
+                          trailing: Switch(
                             value: _biometricLogin,
-                            onChanged: (value) {
-                              setState(() => _biometricLogin = value);
-                            },
+                            onChanged: (value) => setState(() => _biometricLogin = value),
                             activeColor: const Color(0xFF00C853),
                           ),
                         ),
                         const Divider(height: 1),
                         _buildSettingItem(
-                          Icons.notifications,
-                          'Notifications',
-                          'Receive health reminders',
-                          Switch(
+                          icon: Icons.notifications,
+                          title: 'Notifications',
+                          subtitle: 'Receive health reminders',
+                          trailing: Switch(
                             value: _notificationsEnabled,
-                            onChanged: (value) {
-                              setState(() => _notificationsEnabled = value);
-                            },
+                            onChanged: (value) => setState(() => _notificationsEnabled = value),
                             activeColor: const Color(0xFF00C853),
                           ),
                         ),
                         const Divider(height: 1),
                         _buildSettingItem(
-                          Icons.sync,
-                          'Data Sync',
-                          'Automatically sync health data',
-                          Switch(
+                          icon: Icons.sync,
+                          title: 'Data Sync',
+                          subtitle: 'Automatically sync health data',
+                          trailing: Switch(
                             value: _dataSyncEnabled,
-                            onChanged: (value) {
-                              setState(() => _dataSyncEnabled = value);
-                            },
+                            onChanged: (value) => setState(() => _dataSyncEnabled = value),
                             activeColor: const Color(0xFF00C853),
                           ),
                         ),
@@ -1264,103 +1222,20 @@ class _ProfileTabState extends State<ProfileTab> {
                   ),
 
                   const SizedBox(height: 24),
-
-                  // Security Section
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      'Security',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: Text('Security', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                   ),
-                  Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          TextFormField(
-                            controller: _currentPasswordController,
-                            obscureText: true,
-                            decoration: const InputDecoration(
-                              labelText: 'Current Password',
-                              prefixIcon: Icon(Icons.lock_outline),
-                              filled: true,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _newPasswordController,
-                            obscureText: true,
-                            decoration: const InputDecoration(
-                              labelText: 'New Password',
-                              prefixIcon: Icon(Icons.lock_outline),
-                              filled: true,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _confirmPasswordController,
-                            obscureText: true,
-                            decoration: const InputDecoration(
-                              labelText: 'Confirm New Password',
-                              prefixIcon: Icon(Icons.lock_outline),
-                              filled: true,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: _isChangingPassword ? null : _changePassword,
-                              child: _isChangingPassword
-                                  ? const Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                        SizedBox(width: 8),
-                                        Text('Changing Password...'),
-                                      ],
-                                    )
-                                  : const Text('Change Password'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  _buildSecuritySection(),
 
                   const SizedBox(height: 24),
-
-                  // Data Management Section
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      'Data Management',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: Text('Data Management', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                   ),
                   Card(
                     elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     child: Column(
                       children: [
                         ListTile(
@@ -1372,39 +1247,16 @@ class _ProfileTabState extends State<ProfileTab> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: _isSyncingWearable
-                                ? const Center(
-                                    child: SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.blue,
-                                      ),
-                                    ),
-                                  )
+                                ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue)))
                                 : const Icon(Icons.watch, color: Colors.blue),
                           ),
-                          title: const Text(
-                            'Sync with Wearable',
-                            style: TextStyle(fontWeight: FontWeight.w500),
-                          ),
+                          title: const Text('Sync with Wearable', style: TextStyle(fontWeight: FontWeight.w500)),
                           subtitle: const Text('Connect to smartwatch/fitness tracker'),
                           trailing: ElevatedButton(
                             onPressed: _isSyncingWearable ? null : _syncWithWearable,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                            ),
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
                             child: _isSyncingWearable
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                                 : const Text('Sync'),
                           ),
                         ),
@@ -1418,47 +1270,23 @@ class _ProfileTabState extends State<ProfileTab> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: _isExportingData
-                                ? const Center(
-                                    child: SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.green,
-                                      ),
-                                    ),
-                                  )
+                                ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.green)))
                                 : const Icon(Icons.download, color: Colors.green),
                           ),
-                          title: const Text(
-                            'Export Health Data',
-                            style: TextStyle(fontWeight: FontWeight.w500),
-                          ),
+                          title: const Text('Export Health Data', style: TextStyle(fontWeight: FontWeight.w500)),
                           subtitle: const Text('Download your health records'),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
                                 icon: _isExportingData
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
+                                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                                     : const Icon(Icons.picture_as_pdf),
                                 onPressed: _isExportingData ? null : () => _exportData('PDF'),
                               ),
                               IconButton(
                                 icon: _isExportingData
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
+                                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                                     : const Icon(Icons.grid_on),
                                 onPressed: _isExportingData ? null : () => _exportData('CSV'),
                               ),
@@ -1466,66 +1294,35 @@ class _ProfileTabState extends State<ProfileTab> {
                           ),
                         ),
                         const Divider(height: 1),
-                        ListTile(
-                          leading: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.red.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(Icons.delete, color: Colors.red),
-                          ),
-                          title: const Text(
-                            'Delete Account',
-                            style: TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          subtitle: const Text('Permanently remove your account and data'),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.chevron_right),
-                            onPressed: _deleteAccount,
-                          ),
+                        _buildSettingItem(
+                          icon: Icons.delete,
+                          title: 'Delete Account',
+                          subtitle: 'Permanently remove your account and data',
+                          trailing: IconButton(icon: const Icon(Icons.chevron_right), onPressed: _deleteAccount),
+                          onTap: _deleteAccount,
                         ),
                       ],
                     ),
                   ),
 
                   const SizedBox(height: 24),
-
-                  // Logout Button
                   SizedBox(
                     width: double.infinity,
                     height: 56,
                     child: OutlinedButton.icon(
                       onPressed: _isLoggingOut ? null : _logout,
                       style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         side: BorderSide(color: Colors.red.withOpacity(0.5)),
                       ),
                       icon: _isLoggingOut
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.red,
-                              ),
-                            )
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red))
                           : const Icon(Icons.logout, color: Colors.red),
                       label: _isLoggingOut
-                          ? const Text(
-                              'Logging out...',
-                              style: TextStyle(color: Colors.red),
-                            )
-                          : const Text(
-                              'Logout',
-                              style: TextStyle(color: Colors.red),
-                            ),
+                          ? const Text('Logging out...', style: TextStyle(color: Colors.red))
+                          : const Text('Logout', style: TextStyle(color: Colors.red)),
                     ),
                   ),
-
                   const SizedBox(height: 32),
                 ],
               ),
