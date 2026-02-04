@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../services/auth_service.dart';
 import '../services/profile_service.dart';
 import '../services/account_service.dart';
+import '../services/password_setup_service.dart'; // Add this import
 import '../utils/api_config.dart';
 import 'login_page.dart';
 
@@ -365,13 +366,23 @@ class _ProfileTabState extends State<ProfileTab> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Successfully synced with wearable devices!'),
-        backgroundColor: const Color(0xFF00C853),
+        backgroundColor: Color(0xFF00C853),
       ),
     );
   }
 
+  // ✅ UPDATED: Change password with Google user check
   Future<void> _changePassword() async {
-    // Validation
+    // First check if user has a password (Google users might not)
+    final hasPassword = await _checkIfUserHasPassword();
+    
+    if (!hasPassword) {
+      // Google user without password - show setup dialog instead
+      _showGoogleUserPasswordSetup();
+      return;
+    }
+    
+    // Original validation
     if (_newPasswordController.text != _confirmPasswordController.text) {
       _showErrorDialog('Error', 'Passwords do not match');
       return;
@@ -419,6 +430,138 @@ class _ProfileTabState extends State<ProfileTab> {
       setState(() => _isChangingPassword = false);
       _showErrorDialog('Error', 'Failed to change password');
     }
+  }
+
+  // ✅ ADDED: Check if user has password
+  Future<bool> _checkIfUserHasPassword() async {
+    try {
+      final result = await PasswordSetupService.hasPassword();
+      if (result['success'] == true) {
+        return result['hasPassword'] ?? false;
+      }
+      return true; // Assume they have password if check fails
+    } catch (e) {
+      return true; // Assume they have password
+    }
+  }
+
+  // ✅ ADDED: Show password setup for Google users
+  void _showGoogleUserPasswordSetup() {
+    final passwordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    bool isSettingUp = false;
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Setup Password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'You don\'t have a password set. Please setup a password to enable password changes.',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              if (isSettingUp)
+                const Center(child: CircularProgressIndicator())
+              else ...[
+                TextField(
+                  controller: passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'New Password',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: confirmPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Confirm Password',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ]
+            ],
+          ),
+          actions: isSettingUp
+              ? []
+              : [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      // Validation
+                      if (passwordController.text.isEmpty || 
+                          confirmPasswordController.text.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please fill in both password fields'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      if (passwordController.text.length < 8) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Password must be at least 8 characters'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      if (passwordController.text != confirmPasswordController.text) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Passwords do not match'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      setState(() => isSettingUp = true);
+                      
+                      final result = await PasswordSetupService.setupPassword(
+                        password: passwordController.text,
+                        confirmPassword: confirmPasswordController.text,
+                      );
+                      
+                      if (mounted) {
+                        setState(() => isSettingUp = false);
+                        
+                        if (result['success'] == true) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(result['message']),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                          Navigator.pop(context);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(result['message']),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Setup Password'),
+                  ),
+                ],
+        ),
+      ),
+    );
   }
 
   Future<void> _updateName() async {

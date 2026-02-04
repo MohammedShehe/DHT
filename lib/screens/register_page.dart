@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'login_page.dart';
 import 'permission_page.dart';
+import 'home_dashboard.dart';
 import '../services/auth_service.dart';
+import '../services/password_setup_service.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -150,12 +152,12 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  // ✅ UPDATED: Google Sign-In with proper token handling
+  // ✅ UPDATED: Google Sign-In with NEW flow for registration
   void _signInWithGoogle() async {
     setState(() => _isLoading = true);
     
     try {
-      print('Starting Google Sign-In process...');
+      print('Starting Google Sign-In process for registration...');
       
       // Sign out first to ensure fresh login
       await _googleSignIn.signOut();
@@ -178,8 +180,8 @@ class _RegisterPageState extends State<RegisterPage> {
       print('Google Auth - ID Token: ${googleAuth.idToken}');
       print('Google Auth - Access Token: ${googleAuth.accessToken}');
       
-      // ✅ Call backend with both tokens (backend will use whichever is available)
-      await _processGoogleLogin(
+      // ✅ NEW FLOW: Check if user exists first
+      await _handleGoogleRegistration(
         idToken: googleAuth.idToken,
         accessToken: googleAuth.accessToken,
       );
@@ -198,13 +200,63 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  // ✅ UPDATED: Process Google login with both tokens
-  Future<void> _processGoogleLogin({
+  // ✅ NEW: Handle Google registration flow
+  Future<void> _handleGoogleRegistration({
     String? idToken,
     String? accessToken,
   }) async {
     try {
-      // Call backend Google login endpoint with both tokens
+      // Step 1: Check if user exists
+      final existenceResult = await AuthService.checkGoogleUserExists(
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+      
+      if (!mounted) return;
+      
+      if (existenceResult['success'] == true) {
+        final userExists = existenceResult['userExists'] ?? true;
+        
+        if (userExists) {
+          // User exists - regular login
+          await _processExistingGoogleUser(
+            idToken: idToken,
+            accessToken: accessToken,
+          );
+        } else {
+          // New user - complete registration
+          await _processNewGoogleUser(
+            idToken: idToken,
+            accessToken: accessToken,
+          );
+        }
+      } else {
+        // Fallback to regular login if existence check fails
+        await _processExistingGoogleUser(
+          idToken: idToken,
+          accessToken: accessToken,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Google registration failed: $e'),
+            backgroundColor: Colors.red[400],
+          ),
+        );
+      }
+    }
+  }
+
+  // ✅ Process existing Google user (login)
+  Future<void> _processExistingGoogleUser({
+    String? idToken,
+    String? accessToken,
+  }) async {
+    try {
+      // Perform regular Google login
       final result = await AuthService.googleLogin(
         idToken: idToken,
         accessToken: accessToken,
@@ -214,30 +266,33 @@ class _RegisterPageState extends State<RegisterPage> {
         setState(() => _isLoading = false);
         
         if (result['success'] == true) {
-          // ✅ Store the token for Google login
-          if (result['token'] != null) {
-            await AuthService.storeToken(result['token']);
-          }
-          
           // Show success message
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result['message']),
+              content: Text(result['message'] ?? 'Login successful'),
               backgroundColor: Colors.green,
             ),
           );
           
-          // Navigate to permission page
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const PermissionPage()),
-            (route) => false,
-          );
+          // Check if user needs password setup
+          final requiresPasswordSetup = result['requiresPasswordSetup'] ?? false;
+          
+          if (requiresPasswordSetup) {
+            // Show password setup dialog
+            await _showPasswordSetupDialog();
+          } else {
+            // Go directly to dashboard
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const HomeDashboard()),
+              (route) => false,
+            );
+          }
         } else {
           // Show error message
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result['message']),
+              content: Text(result['message'] ?? 'Login failed'),
               backgroundColor: Colors.red[400],
             ),
           );
@@ -248,12 +303,222 @@ class _RegisterPageState extends State<RegisterPage> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to process Google login: $e'),
+            content: Text('Login failed: $e'),
             backgroundColor: Colors.red[400],
           ),
         );
       }
     }
+  }
+
+  // ✅ Process new Google user (registration)
+  Future<void> _processNewGoogleUser({
+    String? idToken,
+    String? accessToken,
+  }) async {
+    try {
+      // Perform Google login (which will create the user)
+      final result = await AuthService.googleLogin(
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+      
+      if (mounted) {
+        setState(() => _isLoading = false);
+        
+        if (result['success'] == true) {
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Registration successful!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          
+          // New Google user - show password setup dialog
+          await _showPasswordSetupDialog(isNewUser: true);
+        } else {
+          // Show error message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'Registration failed'),
+              backgroundColor: Colors.red[400],
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Registration failed: $e'),
+            backgroundColor: Colors.red[400],
+          ),
+        );
+      }
+    }
+  }
+
+  // ✅ UPDATED: Password setup dialog
+  Future<void> _showPasswordSetupDialog({bool isNewUser = false}) async {
+    final passwordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    bool isSettingUp = false;
+    
+    await showDialog(
+      context: context,
+      barrierDismissible: false, // Prevent closing without setting password
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Setup Password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                isNewUser 
+                  ? 'Setup a password for your new account to enable email/password login and password changes.'
+                  : 'You don\'t have a password set. Please setup a password for your account.',
+                style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              if (isSettingUp)
+                const Center(child: CircularProgressIndicator())
+              else ...[
+                TextField(
+                  controller: passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: confirmPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Confirm Password',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Password must be at least 8 characters with uppercase and number',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ]
+            ],
+          ),
+          actions: isSettingUp
+              ? []
+              : [
+                  ElevatedButton(
+                    onPressed: () async {
+                      // Validation
+                      if (passwordController.text.isEmpty || 
+                          confirmPasswordController.text.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please fill in both password fields'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      if (passwordController.text.length < 8) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Password must be at least 8 characters'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      if (!passwordController.text.contains(RegExp(r'[A-Z]'))) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Password must contain at least one uppercase letter'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      if (!passwordController.text.contains(RegExp(r'[0-9]'))) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Password must contain at least one number'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      if (passwordController.text != confirmPasswordController.text) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Passwords do not match'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      setState(() => isSettingUp = true);
+                      
+                      final result = await PasswordSetupService.setupPassword(
+                        password: passwordController.text,
+                        confirmPassword: confirmPasswordController.text,
+                      );
+                      
+                      if (mounted) {
+                        setState(() => isSettingUp = false);
+                        
+                        if (result['success'] == true) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(result['message']),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                          
+                          Navigator.pop(context); // Close dialog
+                          
+                          // Navigate based on whether this is a new user
+                          if (isNewUser) {
+                            // New user: Go to permission page
+                            Navigator.pushAndRemoveUntil(
+                              context,
+                              MaterialPageRoute(builder: (_) => const PermissionPage()),
+                              (route) => false,
+                            );
+                          } else {
+                            // Existing user: Go to home
+                            Navigator.pushAndRemoveUntil(
+                              context,
+                              MaterialPageRoute(builder: (_) => const HomeDashboard()),
+                              (route) => false,
+                            );
+                          }
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(result['message']),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Setup Password'),
+                  ),
+                ],
+        ),
+      ),
+    );
   }
 
   @override

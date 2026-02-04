@@ -223,10 +223,11 @@ class AuthService {
     }
   }
 
-  // ✅ UPDATED: Google OAuth login - accepts both idToken and accessToken
+  // ✅ UPDATED: Google OAuth login with user existence check
   static Future<Map<String, dynamic>> googleLogin({
     String? idToken,
     String? accessToken,
+    bool checkExistenceOnly = false, // NEW: For checking if user exists
   }) async {
     if (!await _checkNetwork()) {
       return {
@@ -254,6 +255,11 @@ class AuthService {
         };
       }
 
+      // Add flag to check existence only (for registration flow)
+      if (checkExistenceOnly) {
+        requestBody['check_existence'] = true;
+      }
+
       final response = await http.post(
         Uri.parse('$baseUrl/google'),
         headers: {'Content-Type': 'application/json'},
@@ -263,13 +269,17 @@ class AuthService {
       final data = json.decode(response.body);
       
       if (response.statusCode == 200) {
-        // Always save token to storage
-        await _saveToken(data['token']);
+        // For existence check, don't save token
+        if (!checkExistenceOnly) {
+          await _saveToken(data['token']);
+        }
         
         return {
           'success': true,
           'message': data['message'],
-          'token': data['token'],
+          'token': checkExistenceOnly ? null : data['token'],
+          'userExists': data['userExists'] ?? true, // Default to true if not specified
+          'requiresPasswordSetup': data['requiresPasswordSetup'] ?? false,
         };
       } else {
         return {
@@ -601,5 +611,47 @@ class AuthService {
     return {
       'Authorization': 'Bearer $token',
     };
+  }
+
+  // ✅ Check if user exists via Google (for registration flow)
+  static Future<Map<String, dynamic>> checkGoogleUserExists({
+    String? idToken,
+    String? accessToken,
+  }) async {
+    return await googleLogin(
+      idToken: idToken,
+      accessToken: accessToken,
+      checkExistenceOnly: true,
+    );
+  }
+
+  // ✅ Check if current user has password (using the password setup service)
+  static Future<Map<String, dynamic>> hasPassword() async {
+    try {
+      final headers = await getAuthHeaders();
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/profile/has-password'),
+        headers: headers,
+      );
+
+      final data = json.decode(response.body);
+      
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'hasPassword': data['hasPassword'] ?? false,
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to check password status',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Connection error: $e',
+      };
+    }
   }
 }

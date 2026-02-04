@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'forgot_password_page.dart';
 import 'home_dashboard.dart';
 import '../services/auth_service.dart';
+import '../services/password_setup_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -86,7 +87,6 @@ class _LoginPageState extends State<LoginPage> {
       // Save remember me preference
       await _saveCredentials();
       
-      // UPDATED: Call login without rememberMe parameter
       final result = await AuthService.login(
         email: _emailController.text,
         password: _passwordController.text,
@@ -123,15 +123,15 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // ✅ UPDATED: Google Sign-In with proper token handling
+  // ✅ UPDATED: Google Sign-In for login flow
   void _signInWithGoogle() async {
     setState(() => _isLoading = true);
 
-     // DEBUG: Print current backend URL
-  print('🌐 Current backend URL: ${AuthService.baseUrl}');
+    // DEBUG: Print current backend URL
+    print('🌐 Current backend URL: ${AuthService.baseUrl}');
     
     try {
-      print('Starting Google Sign-In process...');
+      print('Starting Google Sign-In process for login...');
       
       // Sign out first to ensure fresh login
       await _googleSignIn.signOut();
@@ -154,7 +154,7 @@ class _LoginPageState extends State<LoginPage> {
       print('Google Auth - ID Token: ${googleAuth.idToken}');
       print('Google Auth - Access Token: ${googleAuth.accessToken}');
       
-      // ✅ Call backend with both tokens (backend will use whichever is available)
+      // ✅ Process Google login
       await _processGoogleLogin(
         idToken: googleAuth.idToken,
         accessToken: googleAuth.accessToken,
@@ -174,7 +174,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // ✅ UPDATED: Process Google login with both tokens
+  // ✅ UPDATED: Process Google login with existence check
   Future<void> _processGoogleLogin({
     String? idToken,
     String? accessToken,
@@ -183,7 +183,7 @@ class _LoginPageState extends State<LoginPage> {
       // Save remember me preference for Google login
       await _saveCredentials();
       
-      // Call backend Google login endpoint with both tokens
+      // Call backend Google login endpoint
       final result = await AuthService.googleLogin(
         idToken: idToken,
         accessToken: accessToken,
@@ -196,22 +196,30 @@ class _LoginPageState extends State<LoginPage> {
           // Show success message
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result['message']),
+              content: Text(result['message'] ?? 'Login successful'),
               backgroundColor: Colors.green,
             ),
           );
           
-          // Navigate to home
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const HomeDashboard()),
-            (route) => false,
-          );
+          // Check if user needs password setup
+          final requiresPasswordSetup = result['requiresPasswordSetup'] ?? false;
+          
+          if (requiresPasswordSetup) {
+            // Google user without password - show password setup dialog
+            await _showPasswordSetupDialog();
+          } else {
+            // User has password, go to home
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const HomeDashboard()),
+              (route) => false,
+            );
+          }
         } else {
           // Show error message
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result['message']),
+              content: Text(result['message'] ?? 'Login failed'),
               backgroundColor: Colors.red,
             ),
           );
@@ -228,6 +236,155 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     }
+  }
+
+  // ✅ UPDATED: Password setup dialog for Google users
+  Future<void> _showPasswordSetupDialog() async {
+    final passwordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    bool isSettingUp = false;
+    
+    await showDialog(
+      context: context,
+      barrierDismissible: false, // Prevent closing without setting password
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Setup Password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'You don\'t have a password set. Please setup a password for your account to enable email/password login and password changes.',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              if (isSettingUp)
+                const Center(child: CircularProgressIndicator())
+              else ...[
+                TextField(
+                  controller: passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: confirmPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Confirm Password',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Password must be at least 8 characters with uppercase and number',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ]
+            ],
+          ),
+          actions: isSettingUp
+              ? []
+              : [
+                  ElevatedButton(
+                    onPressed: () async {
+                      // Validation
+                      if (passwordController.text.isEmpty || 
+                          confirmPasswordController.text.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please fill in both password fields'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      if (passwordController.text.length < 8) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Password must be at least 8 characters'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      if (!passwordController.text.contains(RegExp(r'[A-Z]'))) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Password must contain at least one uppercase letter'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      if (!passwordController.text.contains(RegExp(r'[0-9]'))) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Password must contain at least one number'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      if (passwordController.text != confirmPasswordController.text) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Passwords do not match'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      setState(() => isSettingUp = true);
+                      
+                      final result = await PasswordSetupService.setupPassword(
+                        password: passwordController.text,
+                        confirmPassword: confirmPasswordController.text,
+                      );
+                      
+                      if (mounted) {
+                        setState(() => isSettingUp = false);
+                        
+                        if (result['success'] == true) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(result['message']),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                          
+                          Navigator.pop(context); // Close dialog
+                          
+                          // Go to home dashboard
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(builder: (_) => const HomeDashboard()),
+                            (route) => false,
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(result['message']),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Setup Password'),
+                  ),
+                ],
+        ),
+      ),
+    );
   }
 
   @override
