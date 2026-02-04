@@ -223,9 +223,10 @@ class AuthService {
     }
   }
 
-  // Google OAuth login
+  // ✅ UPDATED: Google OAuth login - accepts both idToken and accessToken
   static Future<Map<String, dynamic>> googleLogin({
-    required String idToken,
+    String? idToken,
+    String? accessToken,
   }) async {
     if (!await _checkNetwork()) {
       return {
@@ -235,12 +236,28 @@ class AuthService {
     }
 
     try {
+      // Prepare request body
+      Map<String, dynamic> requestBody = {};
+      
+      if (idToken != null) {
+        requestBody['token'] = idToken;
+      }
+      
+      if (accessToken != null) {
+        requestBody['accessToken'] = accessToken;
+      }
+      
+      if (requestBody.isEmpty) {
+        return {
+          'success': false,
+          'message': 'No authentication token provided',
+        };
+      }
+
       final response = await http.post(
         Uri.parse('$baseUrl/google'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'token': idToken,
-        }),
+        body: json.encode(requestBody),
       );
 
       final data = json.decode(response.body);

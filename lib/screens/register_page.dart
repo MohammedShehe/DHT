@@ -150,10 +150,13 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
+  // ✅ UPDATED: Google Sign-In with proper token handling
   void _signInWithGoogle() async {
     setState(() => _isLoading = true);
     
     try {
+      print('Starting Google Sign-In process...');
+      
       // Sign out first to ensure fresh login
       await _googleSignIn.signOut();
       
@@ -162,21 +165,49 @@ class _RegisterPageState extends State<RegisterPage> {
       
       if (googleUser == null) {
         // User cancelled the sign-in
+        print('User cancelled Google Sign-In');
         setState(() => _isLoading = false);
         return;
       }
       
+      print('Google User: ${googleUser.email}, ID: ${googleUser.id}');
+      
       // Get authentication details
-      final GoogleSignInAuthentication googleAuth = 
-          await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       
-      if (googleAuth.idToken == null) {
-        throw Exception('Google authentication failed: No ID token');
+      print('Google Auth - ID Token: ${googleAuth.idToken}');
+      print('Google Auth - Access Token: ${googleAuth.accessToken}');
+      
+      // ✅ Call backend with both tokens (backend will use whichever is available)
+      await _processGoogleLogin(
+        idToken: googleAuth.idToken,
+        accessToken: googleAuth.accessToken,
+      );
+      
+    } catch (e) {
+      print('Google Sign-In Error: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Google sign-in failed: ${e.toString()}'),
+            backgroundColor: Colors.red[400],
+          ),
+        );
       }
-      
-      // Call backend Google login endpoint
+    }
+  }
+
+  // ✅ UPDATED: Process Google login with both tokens
+  Future<void> _processGoogleLogin({
+    String? idToken,
+    String? accessToken,
+  }) async {
+    try {
+      // Call backend Google login endpoint with both tokens
       final result = await AuthService.googleLogin(
-        idToken: googleAuth.idToken!,
+        idToken: idToken,
+        accessToken: accessToken,
       );
       
       if (mounted) {
@@ -217,7 +248,7 @@ class _RegisterPageState extends State<RegisterPage> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Google sign-in failed: $e'),
+            content: Text('Failed to process Google login: $e'),
             backgroundColor: Colors.red[400],
           ),
         );
