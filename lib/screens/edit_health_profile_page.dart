@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'home_dashboard.dart';
 import '../services/health_service.dart';
 import '../models/health_profile_model.dart';
 import '../utils/snackbar_helper.dart';
 
-class SetupPage extends StatefulWidget {
-  const SetupPage({super.key});
+class EditHealthProfilePage extends StatefulWidget {
+  final HealthProfileModel? existingProfile;
+
+  const EditHealthProfilePage({super.key, this.existingProfile});
 
   @override
-  State<SetupPage> createState() => _SetupPageState();
+  State<EditHealthProfilePage> createState() => _EditHealthProfilePageState();
 }
 
-class _SetupPageState extends State<SetupPage> {
+class _EditHealthProfilePageState extends State<EditHealthProfilePage> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   
@@ -54,6 +55,49 @@ class _SetupPageState extends State<SetupPage> {
     'Pilates',
     'Team Sports',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExistingProfile();
+  }
+
+  void _loadExistingProfile() {
+    if (widget.existingProfile != null) {
+      final profile = widget.existingProfile!;
+      
+      // Personal Information
+      _ageController.text = profile.age?.toString() ?? '';
+      _heightController.text = profile.height?.toString() ?? '';
+      _weightController.text = profile.weight?.toString() ?? '';
+      
+      // Dropdown values
+      _gender = profile.gender ?? 'Male';
+      _activityLevel = profile.activityLevel ?? 'Moderate';
+      _healthGoal = profile.healthGoal ?? 'Maintain Weight';
+      _bloodType = profile.bloodType ?? 'A+';
+      _allergies = profile.allergies ?? '';
+      _medications = profile.medications ?? '';
+      _medicalConditions = profile.medicalConditions ?? '';
+      
+      // Health Metrics
+      _bloodPressureController.text = profile.bloodPressure ?? '';
+      _glucoseController.text = profile.glucose?.toString() ?? '';
+      _cholesterolController.text = profile.cholesterol?.toString() ?? '';
+      
+      // Toggle values
+      _hasDiabetes = profile.hasDiabetes;
+      _hasHypertension = profile.hasHypertension;
+      _hasHeartCondition = profile.hasHeartCondition;
+      _smoker = profile.smoker;
+      _alcoholConsumer = profile.alcoholConsumer;
+      
+      // Activity types
+      if (profile.activityTypes != null && profile.activityTypes!.isNotEmpty) {
+        _selectedActivityTypes = profile.activityTypes!.split(',').toList();
+      }
+    }
+  }
 
   void _toggleActivityType(String activity) {
     setState(() {
@@ -119,20 +163,16 @@ class _SetupPageState extends State<SetupPage> {
         if (mounted) {
           SnackbarHelper.showSuccess(
             context,
-            'Health profile saved successfully!',
+            'Health profile updated successfully!',
           );
           
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const HomeDashboard()),
-            (route) => false,
-          );
+          Navigator.pop(context, true); // Return true to indicate update
         }
       } else {
         if (mounted) {
           SnackbarHelper.showError(
             context,
-            response['message'] ?? 'Failed to save health profile',
+            response['message'] ?? 'Failed to update health profile',
           );
         }
       }
@@ -165,11 +205,22 @@ class _SetupPageState extends State<SetupPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Health Profile Setup',
-          style: TextStyle(fontWeight: FontWeight.w600),
+        title: Text(
+          widget.existingProfile == null ? 'Create Health Profile' : 'Edit Health Profile',
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         elevation: 0,
+        actions: [
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+              ),
+            ),
+        ],
       ),
       body: SafeArea(
         child: Form(
@@ -190,7 +241,7 @@ class _SetupPageState extends State<SetupPage> {
                 const SizedBox(height: 20),
 
                 const Text(
-                  'Complete Your Health Profile',
+                  'Health Profile Details',
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
@@ -199,7 +250,9 @@ class _SetupPageState extends State<SetupPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Personalized tracking starts with your health details',
+                  widget.existingProfile == null 
+                      ? 'Personalized tracking starts with your health details'
+                      : 'Update your health information below',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey[600],
@@ -444,6 +497,7 @@ class _SetupPageState extends State<SetupPage> {
                 const SizedBox(height: 16),
 
                 TextFormField(
+                  controller: TextEditingController(text: _medications),
                   decoration: InputDecoration(
                     labelText: 'Current Medications',
                     prefixIcon: const Icon(Icons.medication),
@@ -455,6 +509,7 @@ class _SetupPageState extends State<SetupPage> {
                 const SizedBox(height: 16),
 
                 TextFormField(
+                  controller: TextEditingController(text: _allergies),
                   decoration: InputDecoration(
                     labelText: 'Allergies',
                     prefixIcon: const Icon(Icons.warning),
@@ -466,6 +521,7 @@ class _SetupPageState extends State<SetupPage> {
                 const SizedBox(height: 16),
 
                 TextFormField(
+                  controller: TextEditingController(text: _medicalConditions),
                   decoration: InputDecoration(
                     labelText: 'Medical Conditions',
                     prefixIcon: const Icon(Icons.medical_services),
@@ -498,9 +554,11 @@ class _SetupPageState extends State<SetupPage> {
                               strokeWidth: 2,
                             ),
                           )
-                        : const Text(
-                            'Complete Setup & Start Tracking',
-                            style: TextStyle(
+                        : Text(
+                            widget.existingProfile == null
+                                ? 'Create Health Profile'
+                                : 'Update Health Profile',
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),

@@ -6,9 +6,12 @@ import 'package:flutter/foundation.dart';
 import '../services/auth_service.dart';
 import '../services/profile_service.dart';
 import '../services/account_service.dart';
-import '../services/password_setup_service.dart'; // Add this import
+import '../services/password_setup_service.dart';
+import '../services/health_service.dart';
 import '../utils/api_config.dart';
+import '../models/health_profile_model.dart';
 import 'login_page.dart';
+import 'edit_health_profile_page.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -22,6 +25,9 @@ class _ProfileTabState extends State<ProfileTab> {
   String fullName = "Loading...";
   String email = "Loading...";
   String profilePic = "";
+  
+  // Health Profile Data
+  HealthProfileModel? _healthProfile;
   
   // Preferences
   ThemeMode _themeMode = ThemeMode.system;
@@ -50,6 +56,7 @@ class _ProfileTabState extends State<ProfileTab> {
   bool _isLoggingOut = false;
   bool _isSyncingWearable = false;
   bool _isExportingData = false;
+  bool _isLoadingHealthProfile = false;
 
   // Health Stats
   final Map<String, dynamic> healthStats = {
@@ -71,6 +78,7 @@ class _ProfileTabState extends State<ProfileTab> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadProfileData();
+      _loadHealthProfile();
     });
   }
 
@@ -86,7 +94,6 @@ class _ProfileTabState extends State<ProfileTab> {
     super.dispose();
   }
 
-  // Helper method to show error dialog
   void _showErrorDialog(String title, String message) {
     showDialog(
       context: context,
@@ -103,7 +110,6 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  // Helper method to parse error messages
   String _parseErrorMessage(String message) {
     final lowerMessage = message.toLowerCase();
     
@@ -168,6 +174,52 @@ class _ProfileTabState extends State<ProfileTab> {
     
     if (!mounted) return;
     setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadHealthProfile() async {
+    if (!mounted) return;
+    
+    setState(() => _isLoadingHealthProfile = true);
+    
+    try {
+      final result = await HealthService.getHealthProfile();
+      
+      if (!mounted) return;
+      
+      if (result['success'] == true && result['profile'] != null) {
+        setState(() {
+          _healthProfile = HealthProfileModel.fromJson(result['profile']);
+        });
+      } else {
+        setState(() {
+          _healthProfile = null;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _healthProfile = null;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingHealthProfile = false);
+      }
+    }
+  }
+
+  void _editHealthProfile() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditHealthProfilePage(
+          existingProfile: _healthProfile,
+        ),
+      ),
+    ).then((updated) {
+      if (updated == true) {
+        _loadHealthProfile();
+      }
+    });
   }
 
   Future<void> _performLogout() async {
@@ -253,7 +305,6 @@ class _ProfileTabState extends State<ProfileTab> {
         final bytes = await pickedFile.readAsBytes();
         final fileName = pickedFile.name;
         
-        // Validate image size (max 5MB)
         if (bytes.length > 5 * 1024 * 1024) {
           if (mounted) {
             setState(() => _isUploadingImage = false);
@@ -262,7 +313,6 @@ class _ProfileTabState extends State<ProfileTab> {
           return;
         }
         
-        // Store for UI preview
         if (mounted) {
           setState(() {
             _profileImageBytes = bytes;
@@ -270,7 +320,6 @@ class _ProfileTabState extends State<ProfileTab> {
           });
         }
         
-        // Upload the image
         final result = await ProfileService.uploadProfilePic(
           imageFile: kIsWeb ? null : File(pickedFile.path),
           fileName: fileName,
@@ -371,18 +420,14 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  // ✅ UPDATED: Change password with Google user check
   Future<void> _changePassword() async {
-    // First check if user has a password (Google users might not)
     final hasPassword = await _checkIfUserHasPassword();
     
     if (!hasPassword) {
-      // Google user without password - show setup dialog instead
       _showGoogleUserPasswordSetup();
       return;
     }
     
-    // Original validation
     if (_newPasswordController.text != _confirmPasswordController.text) {
       _showErrorDialog('Error', 'Passwords do not match');
       return;
@@ -432,20 +477,18 @@ class _ProfileTabState extends State<ProfileTab> {
     }
   }
 
-  // ✅ ADDED: Check if user has password
   Future<bool> _checkIfUserHasPassword() async {
     try {
       final result = await PasswordSetupService.hasPassword();
       if (result['success'] == true) {
         return result['hasPassword'] ?? false;
       }
-      return true; // Assume they have password if check fails
+      return true;
     } catch (e) {
-      return true; // Assume they have password
+      return true;
     }
   }
 
-  // ✅ ADDED: Show password setup for Google users
   void _showGoogleUserPasswordSetup() {
     final passwordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
@@ -496,7 +539,6 @@ class _ProfileTabState extends State<ProfileTab> {
                   ),
                   ElevatedButton(
                     onPressed: () async {
-                      // Validation
                       if (passwordController.text.isEmpty || 
                           confirmPasswordController.text.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -1082,25 +1124,20 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   ImageProvider _getProfileImage() {
-    // If we have a newly selected image, show it
     if (_profileImageBytes != null) {
       return MemoryImage(_profileImageBytes!);
     }
     
-    // If we have a saved profile picture from server
     if (profilePic.isNotEmpty) {
       String imageUrl = profilePic;
       
-      // Check if it's a full URL or relative path
       if (!profilePic.startsWith('http')) {
-        // Construct full URL from base URL
         imageUrl = '${ApiConfig.baseUrl.replaceAll('/api', '')}/$profilePic';
       }
       
       return NetworkImage(imageUrl) as ImageProvider;
     }
     
-    // Default avatar
     return const AssetImage('assets/default_avatar.jpg');
   }
 
@@ -1167,6 +1204,376 @@ class _ProfileTabState extends State<ProfileTab> {
           : null,
       trailing: trailing,
       onTap: onTap,
+    );
+  }
+
+  Widget _buildHealthProfileSection() {
+    if (_isLoadingHealthProfile) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: CircularProgressIndicator(color: Color(0xFF00C853)),
+        ),
+      );
+    }
+
+    if (_healthProfile == null) {
+      return Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              const Icon(
+                Icons.health_and_safety,
+                size: 48,
+                color: Colors.grey,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'No health profile found',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Complete your health profile to get personalized tracking',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _editHealthProfile,
+                icon: const Icon(Icons.add),
+                label: const Text('Create Health Profile'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00C853),
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Health Profile',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit, color: Color(0xFF00C853)),
+                  onPressed: _editHealthProfile,
+                ),
+              ],
+            ),
+            const Divider(),
+            
+            Row(
+              children: [
+                Expanded(
+                  child: _buildHealthInfoItem(
+                    'Age',
+                    _healthProfile?.age?.toString() ?? '-',
+                    Icons.calendar_today,
+                  ),
+                ),
+                Expanded(
+                  child: _buildHealthInfoItem(
+                    'Gender',
+                    _healthProfile?.gender ?? '-',
+                    Icons.person,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            
+            Row(
+              children: [
+                Expanded(
+                  child: _buildHealthInfoItem(
+                    'Height',
+                    _healthProfile?.height != null ? '${_healthProfile!.height} cm' : '-',
+                    Icons.straighten,
+                  ),
+                ),
+                Expanded(
+                  child: _buildHealthInfoItem(
+                    'Weight',
+                    _healthProfile?.weight != null ? '${_healthProfile!.weight} kg' : '-',
+                    Icons.monitor_weight,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey[200]!),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00C853).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.bloodtype,
+                      color: Color(0xFF00C853),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Blood Type',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        Text(
+                          _healthProfile?.bloodType ?? '-',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            Row(
+              children: [
+                Expanded(
+                  child: _buildHealthInfoItem(
+                    'Activity Level',
+                    _healthProfile?.activityLevel ?? '-',
+                    Icons.directions_run,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildHealthInfoItem(
+                    'Health Goal',
+                    _healthProfile?.healthGoal ?? '-',
+                    Icons.flag,
+                  ),
+                ),
+              ],
+            ),
+            
+            if (_healthProfile?.activityTypes != null && _healthProfile!.activityTypes!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Preferred Activities',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: (_healthProfile!.activityTypes!.split(',').map((activity) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF00C853).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: const Color(0xFF00C853).withOpacity(0.3)),
+                          ),
+                          child: Text(
+                            activity.trim(),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF00C853),
+                            ),
+                          ),
+                        );
+                      }).toList()),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            
+            if (_healthProfile?.bloodPressure != null && _healthProfile!.bloodPressure!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildHealthInfoItem(
+                      'Blood Pressure',
+                      _healthProfile!.bloodPressure!,
+                      Icons.monitor_heart,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildHealthInfoItem(
+                      'Glucose',
+                      _healthProfile?.glucose != null ? '${_healthProfile!.glucose} mg/dL' : '-',
+                      Icons.monitor_heart,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            
+            if (_healthProfile?.hasDiabetes == true ||
+                _healthProfile?.hasHypertension == true ||
+                _healthProfile?.hasHeartCondition == true)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Medical Conditions',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.orange,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          if (_healthProfile!.hasDiabetes)
+                            _buildConditionChip('Diabetes'),
+                          if (_healthProfile!.hasHypertension)
+                            _buildConditionChip('Hypertension'),
+                          if (_healthProfile!.hasHeartCondition)
+                            _buildConditionChip('Heart Condition'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHealthInfoItem(String label, String value, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF00C853).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: const Color(0xFF00C853), size: 16),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConditionChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          color: Colors.orange,
+        ),
+      ),
     );
   }
 
@@ -1242,7 +1649,10 @@ class _ProfileTabState extends State<ProfileTab> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadProfileData,
+            onPressed: () {
+              _loadProfileData();
+              _loadHealthProfile();
+            },
           ),
         ],
       ),
@@ -1274,6 +1684,13 @@ class _ProfileTabState extends State<ProfileTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text('Health Information', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                  ),
+                  _buildHealthProfileSection(),
+                  
+                  const SizedBox(height: 24),
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 8),
                     child: Text('Account Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
