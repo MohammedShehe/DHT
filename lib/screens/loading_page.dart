@@ -115,7 +115,7 @@ class _LoadingPageState extends State<LoadingPage>
                       ),
                       const SizedBox(height: 30),
                       const Text(
-                        'HealthTrack',
+                        'HealthTracker',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w700,

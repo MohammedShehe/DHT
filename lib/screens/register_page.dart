@@ -552,7 +552,7 @@ class _RegisterPageState extends State<RegisterPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Welcome to HealthTrack',
+                  'Welcome to HealthTracker',
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
