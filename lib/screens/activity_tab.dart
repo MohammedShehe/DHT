@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../models/activity_models.dart';
 import '../models/food_model.dart';
 import '../widgets/date_selector.dart';
@@ -7,6 +9,9 @@ import '../widgets/progress_chart.dart';
 import '../widgets/activity_cards.dart';
 import '../widgets/food_selection_widget.dart';
 import '../widgets/custom_food_dialog.dart';
+import '../widgets/add_hydration_dialog.dart';
+import '../widgets/add_medication_dialog.dart';
+import '../providers/activity_provider.dart';
 
 class ActivityTab extends StatefulWidget {
   const ActivityTab({super.key});
@@ -90,16 +95,99 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     'interruptions': 2,
   };
 
+  // Hydration data
+  final Map<String, dynamic> _hydrationData = {
+    'totalAmount': 1850, // ml
+    'goalAmount': 2500, // ml (8 glasses)
+    'glasses': 7, // 250ml each
+    'entries': [
+      {'amount': 250, 'time': '08:30 AM', 'type': 'Water'},
+      {'amount': 500, 'time': '12:00 PM', 'type': 'Water'},
+      {'amount': 250, 'time': '03:30 PM', 'type': 'Water'},
+      {'amount': 350, 'time': '06:00 PM', 'type': 'Sports Drink'},
+      {'amount': 250, 'time': '08:30 PM', 'type': 'Water'},
+      {'amount': 250, 'time': '10:00 PM', 'type': 'Water'},
+    ]
+  };
+
+  // Medications data
+  final List<Map<String, dynamic>> _medicationsData = [
+    {
+      'id': '1',
+      'name': 'Vitamin D',
+      'dosage': '1000',
+      'unit': 'IU',
+      'times': ['08:00 AM', '08:00 PM'],
+      'taken': [true, false],
+      'color': Colors.orange.value,
+      'instructions': 'Take with food',
+      'prescribedBy': 'Dr. Smith',
+    },
+    {
+      'id': '2',
+      'name': 'Metformin',
+      'dosage': '500',
+      'unit': 'mg',
+      'times': ['08:00 AM', '02:00 PM', '08:00 PM'],
+      'taken': [true, false, false],
+      'color': Colors.blue.value,
+      'instructions': 'Take after meals',
+      'prescribedBy': 'Dr. Johnson',
+    },
+    {
+      'id': '3',
+      'name': 'Lisinopril',
+      'dosage': '10',
+      'unit': 'mg',
+      'times': ['09:00 AM'],
+      'taken': [true],
+      'color': Colors.green.value,
+      'instructions': 'Take in morning',
+      'prescribedBy': 'Dr. Williams',
+    },
+  ];
+
   // Weekly data for charts
   final List<double> _weeklyCalories = [1650, 1800, 2100, 1950, 1850, 2000, 1750];
   final List<double> _weeklyWorkoutMinutes = [45, 60, 30, 70, 0, 55, 65];
   final List<double> _weeklySleepHours = [6.5, 7.0, 8.0, 7.5, 6.0, 8.5, 7.5];
+  final List<double> _weeklyHydration = [1800, 2100, 1950, 2300, 2100, 1850, 2000];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
+    
+    // Set up message callback for the provider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = Provider.of<ActivityProvider>(context, listen: false);
+      provider.onShowMessage = (String message, {bool isError = false}) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              backgroundColor: isError ? Colors.red : Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      };
+    });
+    
     _loadActivityData();
+  }
+
+  @override
+  void dispose() {
+    // Clean up the callback
+    try {
+      final provider = Provider.of<ActivityProvider>(context, listen: false);
+      provider.onShowMessage = null;
+    } catch (e) {
+      // Provider might not be available during dispose
+    }
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadActivityData() async {
@@ -109,6 +197,8 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
       // final meals = await ActivityService.getMeals(_selectedDate);
       // final workouts = await ActivityService.getWorkouts(_selectedDate);
       // final sleep = await ActivityService.getSleep(_selectedDate);
+      // final hydration = await ActivityService.getHydration(_selectedDate);
+      // final medications = await ActivityService.getMedications();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error loading data: $e'), backgroundColor: Colors.red),
@@ -145,19 +235,23 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
             'fat': meal.fat,
           });
           
-          // Update totals
-          _mealData['totalCalories'] = _mealData['meals'].fold<int>(
-            0, (sum, m) => sum + (m['calories'] as int)
-          );
-          _mealData['protein'] = _mealData['meals'].fold<double>(
-            0, (sum, m) => sum + (m['protein']?.toDouble() ?? 0)
-          ).round();
-          _mealData['carbs'] = _mealData['meals'].fold<double>(
-            0, (sum, m) => sum + (m['carbs']?.toDouble() ?? 0)
-          ).round();
-          _mealData['fat'] = _mealData['meals'].fold<double>(
-            0, (sum, m) => sum + (m['fat']?.toDouble() ?? 0)
-          ).round();
+          // Update totals with proper type casting
+          int totalCalories = 0;
+          double totalProtein = 0.0;
+          double totalCarbs = 0.0;
+          double totalFat = 0.0;
+          
+          for (var m in _mealData['meals']) {
+            totalCalories += m['calories'] as int;
+            totalProtein += (m['protein']?.toDouble() ?? 0.0);
+            totalCarbs += (m['carbs']?.toDouble() ?? 0.0);
+            totalFat += (m['fat']?.toDouble() ?? 0.0);
+          }
+          
+          _mealData['totalCalories'] = totalCalories;
+          _mealData['protein'] = totalProtein.round();
+          _mealData['carbs'] = totalCarbs.round();
+          _mealData['fat'] = totalFat.round();
         });
       }
     });
@@ -181,6 +275,54 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     ).then((_) => _loadActivityData());
   }
 
+  void _showAddHydrationDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const AddHydrationDialog(),
+    ).then((hydration) {
+      if (hydration != null) {
+        setState(() {
+          _hydrationData['entries'].insert(0, {
+            'amount': hydration.amount,
+            'time': DateFormat.jm().format(hydration.time),
+            'type': hydration.type ?? 'Water',
+          });
+          
+          // Update totals with proper type casting
+          int totalAmount = 0;
+          for (var entry in _hydrationData['entries']) {
+            totalAmount += entry['amount'] as int;
+          }
+          
+          _hydrationData['totalAmount'] = totalAmount;
+          _hydrationData['glasses'] = (totalAmount / 250).round();
+        });
+      }
+    });
+  }
+
+  void _showAddMedicationDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const AddMedicationDialog(),
+    ).then((medicationJson) {
+      if (medicationJson != null) {
+        // Use the provider to add the medication
+        final provider = Provider.of<ActivityProvider>(context, listen: false);
+        provider.addMedication(medicationJson);
+        
+        // Also update local state for immediate UI update
+        setState(() {
+          _medicationsData.add(medicationJson as Map<String, dynamic>);
+        });
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -194,10 +336,13 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
           indicatorColor: const Color(0xFF00C853),
           labelColor: const Color(0xFF00C853),
           unselectedLabelColor: Colors.grey,
+          isScrollable: true,
           tabs: const [
             Tab(icon: Icon(Icons.restaurant), text: 'Meals'),
             Tab(icon: Icon(Icons.fitness_center), text: 'Workouts'),
             Tab(icon: Icon(Icons.bedtime), text: 'Sleep'),
+            Tab(icon: Icon(Icons.local_drink), text: 'Hydration'),
+            Tab(icon: Icon(Icons.medication), text: 'Medications'),
           ],
         ),
         actions: [
@@ -226,6 +371,8 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
                       _buildMealsTab(),
                       _buildWorkoutsTab(),
                       _buildSleepTab(),
+                      _buildHydrationTab(),
+                      _buildMedicationsTab(),
                     ],
                   ),
                 ),
@@ -237,15 +384,21 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
             _showAddMealDialog();
           } else if (_tabController.index == 1) {
             _showAddWorkoutDialog();
-          } else {
+          } else if (_tabController.index == 2) {
             _showAddSleepDialog();
+          } else if (_tabController.index == 3) {
+            _showAddHydrationDialog();
+          } else {
+            _showAddMedicationDialog();
           }
         },
         backgroundColor: const Color(0xFF00C853),
         child: Icon(
           _tabController.index == 0 ? Icons.restaurant :
           _tabController.index == 1 ? Icons.fitness_center :
-          Icons.bedtime,
+          _tabController.index == 2 ? Icons.bedtime :
+          _tabController.index == 3 ? Icons.local_drink :
+          Icons.medication,
           color: Colors.white,
         ),
       ),
@@ -632,8 +785,311 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     );
   }
 
+  Widget _buildHydrationTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Water Intake',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.water_drop, color: Colors.blue, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${_hydrationData['glasses']} glasses',
+                              style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Progress circle
+                  Center(
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 180,
+                          height: 180,
+                          child: CircularProgressIndicator(
+                            value: (_hydrationData['totalAmount'] as int) / (_hydrationData['goalAmount'] as int),
+                            backgroundColor: Colors.blue.withOpacity(0.1),
+                            color: Colors.blue,
+                            strokeWidth: 12,
+                          ),
+                        ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${_hydrationData['totalAmount']}ml',
+                              style: const TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.blue,
+                              ),
+                            ),
+                            Text(
+                              'of ${_hydrationData['goalAmount']}ml',
+                              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Quick add buttons
+                  const Text(
+                    'Quick Add',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildQuickAddButton('250ml', 250, Icons.water_drop),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildQuickAddButton('500ml', 500, Icons.water),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildQuickAddButton('750ml', 750, Icons.local_drink),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Weekly chart
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Weekly Hydration',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 200,
+                    child: ProgressChart.bar(
+                      data: _weeklyHydration,
+                      labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+                      color: Colors.blue,
+                      title: 'Weekly Hydration',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Today's entries
+          const Text(
+            "Today's Entries",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
+          
+          ...List.generate(_hydrationData['entries'].length, (index) {
+            final entry = _hydrationData['entries'][index];
+            return _buildHydrationEntryCard(entry);
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMedicationsTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Summary card
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.medication, color: Colors.purple, size: 30),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Medication Adherence',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_getTakenCount()}/${_getTotalDoses()} doses taken today',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${_getAdherencePercentage()}%',
+                      style: const TextStyle(color: Colors.purple, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Active medications
+          const Text(
+            'Active Medications',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
+          
+          ...List.generate(_medicationsData.length, (index) {
+            final medication = _medicationsData[index];
+            return _buildMedicationCard(medication);
+          }),
+          
+          const SizedBox(height: 16),
+          
+          // Adherence chart
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Weekly Adherence',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 150,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: 7,
+                      itemBuilder: (context, index) {
+                        final day = DateTime.now().subtract(Duration(days: 6 - index));
+                        final adherence = 70 + (index * 5); // Sample data
+                        return Container(
+                          width: 80,
+                          margin: const EdgeInsets.only(right: 12),
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  width: 40,
+                                  decoration: BoxDecoration(
+                                    color: Colors.purple.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      Container(
+                                        height: adherence * 0.8,
+                                        width: 40,
+                                        decoration: BoxDecoration(
+                                          color: adherence > 80 ? Colors.green : 
+                                                 adherence > 60 ? Colors.orange : Colors.red,
+                                          borderRadius: const BorderRadius.vertical(
+                                            top: Radius.circular(8),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                DateFormat.E().format(day).substring(0, 1),
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                              Text(
+                                '$adherence%',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildNutrientCard(String label, String value, int goal, Color color) {
-    final percentage = (int.parse(value.replaceAll('g', '')) / goal * 100).clamp(0, 100);
+    final numericValue = int.tryParse(value.replaceAll('g', '')) ?? 0;
+    final percentage = (numericValue / goal * 100).clamp(0, 100);
     
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -698,7 +1154,8 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
   }
 
   Widget _buildSleepStageRow(String label, double hours, Color color) {
-    final percentage = (hours / _sleepData['totalHours'] * 100).round();
+    final totalHours = _sleepData['totalHours'] as double;
+    final percentage = (hours / totalHours * 100).round();
     
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -713,7 +1170,7 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
           ),
           const SizedBox(height: 4),
           LinearProgressIndicator(
-            value: hours / _sleepData['totalHours'],
+            value: hours / totalHours,
             backgroundColor: color.withOpacity(0.2),
             color: color,
             borderRadius: BorderRadius.circular(4),
@@ -748,6 +1205,250 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     );
   }
 
+  Widget _buildQuickAddButton(String label, int amount, IconData icon) {
+    return ElevatedButton(
+      onPressed: () {
+        final now = DateTime.now();
+        
+        setState(() {
+          _hydrationData['entries'].insert(0, {
+            'amount': amount,
+            'time': DateFormat.jm().format(now),
+            'type': 'Water',
+          });
+          _hydrationData['totalAmount'] = (_hydrationData['totalAmount'] as int) + amount;
+          _hydrationData['glasses'] = ((_hydrationData['totalAmount'] as int) / 250).round();
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Added $label of water'),
+            backgroundColor: Colors.blue,
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.blue.withOpacity(0.1),
+        foregroundColor: Colors.blue,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 4),
+          Text(label),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHydrationEntryCard(Map<String, dynamic> entry) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: Colors.blue.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.water_drop, color: Colors.blue),
+        ),
+        title: Text('${entry['amount']}ml ${entry['type']}'),
+        subtitle: Text(entry['time']),
+        trailing: PopupMenuButton(
+          icon: const Icon(Icons.more_vert),
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(Icons.delete, color: Colors.red, size: 20),
+                  SizedBox(width: 8),
+                  Text('Delete'),
+                ],
+              ),
+            ),
+          ],
+          onSelected: (value) {
+            if (value == 'delete') {
+              setState(() {
+                _hydrationData['entries'].remove(entry);
+                
+                // Recalculate total amount
+                int totalAmount = 0;
+                for (var e in _hydrationData['entries']) {
+                  totalAmount += e['amount'] as int;
+                }
+                
+                _hydrationData['totalAmount'] = totalAmount;
+                _hydrationData['glasses'] = (totalAmount / 250).round();
+              });
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMedicationCard(Map<String, dynamic> medication) {
+    final color = Color(medication['color'] ?? Colors.purple.value);
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.medication, color: color),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        medication['name'],
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        '${medication['dosage']}${medication['unit']}',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+                if (medication['prescribedBy'] != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      medication['prescribedBy'],
+                      style: TextStyle(color: color, fontSize: 11),
+                    ),
+                  ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Instructions
+            if (medication['instructions'] != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: Colors.grey[600]),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        medication['instructions'],
+                        style: TextStyle(color: Colors.grey[700], fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            
+            // Doses
+            const Text(
+              "Today's Doses",
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            
+            ...List.generate(medication['times'].length, (index) {
+              final time = medication['times'][index];
+              final taken = medication['taken'][index];
+              return _buildDoseTile(time, taken, color, () {
+                setState(() {
+                  medication['taken'][index] = !medication['taken'][index];
+                });
+              });
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDoseTile(String time, bool taken, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: taken ? color.withOpacity(0.1) : Colors.grey[50],
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: taken ? color.withOpacity(0.3) : Colors.grey[200]!,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              taken ? Icons.check_circle : Icons.radio_button_unchecked,
+              color: taken ? color : Colors.grey[400],
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              time,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: taken ? FontWeight.w600 : FontWeight.normal,
+                color: taken ? color : Colors.grey[700],
+              ),
+            ),
+            const Spacer(),
+            if (taken)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'Taken',
+                  style: TextStyle(fontSize: 11),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Color _getSleepQualityColor(String quality) {
     switch (quality.toLowerCase()) {
       case 'excellent':
@@ -761,6 +1462,31 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
       default:
         return Colors.grey;
     }
+  }
+
+  int _getTotalDoses() {
+    int total = 0;
+    for (var med in _medicationsData) {
+      total += (med['times'] as List).length;
+    }
+    return total;
+  }
+
+  int _getTakenCount() {
+    int taken = 0;
+    for (var med in _medicationsData) {
+      for (var t in med['taken']) {
+        if (t == true) taken++;
+      }
+    }
+    return taken;
+  }
+
+  int _getAdherencePercentage() {
+    final total = _getTotalDoses();
+    if (total == 0) return 0;
+    final taken = _getTakenCount();
+    return ((taken / total) * 100).round();
   }
 
   void _showDatePicker() async {
@@ -787,56 +1513,202 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
   }
 
   void _showWeeklySummary() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (context) => Container(
+      padding: const EdgeInsets.all(20),
+      height: MediaQuery.of(context).size.height * 0.9, // Increased height to accommodate 5 items
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Center(
+            child: Text(
+              'Weekly Summary',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Expanded(
+            child: ListView(
+              children: [
+                _buildWeeklyStatCard(
+                  'Calories',
+                  _weeklyCalories,
+                  Colors.orange,
+                  'kcal',
+                ),
+                const SizedBox(height: 16),
+                _buildWeeklyStatCard(
+                  'Workouts',
+                  _weeklyWorkoutMinutes,
+                  Colors.green,
+                  'min',
+                ),
+                const SizedBox(height: 16),
+                _buildWeeklyStatCard(
+                  'Sleep',
+                  _weeklySleepHours,
+                  Colors.purple,
+                  'h',
+                ),
+                const SizedBox(height: 16),
+                _buildWeeklyStatCard(
+                  'Hydration',
+                  _weeklyHydration,
+                  Colors.blue,
+                  'ml',
+                ),
+                const SizedBox(height: 16),
+                // Add Medication Adherence card
+                _buildMedicationWeeklyCard(),
+              ],
+            ),
+          ),
+        ],
       ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        height: MediaQuery.of(context).size.height * 0.7,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Center(
-              child: Text(
-                'Weekly Summary',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+    ),
+  );
+}
+
+// Add this new method for medication weekly summary
+Widget _buildMedicationWeeklyCard() {
+  // Sample medication adherence data for the week
+  // In a real app, this would come from your provider
+  final List<double> weeklyAdherence = [85, 90, 75, 95, 80, 70, 88]; // Sample percentages
+  
+  return Card(
+    elevation: 2,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Medication Adherence',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Avg: ${(weeklyAdherence.reduce((a, b) => a + b) / weeklyAdherence.length).toStringAsFixed(1)}%',
+                  style: const TextStyle(color: Colors.purple, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 100,
+            child: BarChart(
+              BarChartData(
+                alignment: BarChartAlignment.spaceAround,
+                maxY: 100,
+                barTouchData: BarTouchData(enabled: false),
+                titlesData: FlTitlesData(
+                  show: true,
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (value, meta) {
+                        const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+                        if (value.toInt() >= 0 && value.toInt() < days.length) {
+                          return Text(
+                            days[value.toInt()],
+                            style: const TextStyle(fontSize: 10),
+                          );
+                        }
+                        return const Text('');
+                      },
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      interval: 25,
+                      getTitlesWidget: (value, meta) {
+                        if (value == 0 || value == 25 || value == 50 || value == 75 || value == 100) {
+                          return Text('${value.toInt()}%', style: const TextStyle(fontSize: 8));
+                        }
+                        return const Text('');
+                      },
+                    ),
+                  ),
+                  topTitles: AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                barGroups: List.generate(weeklyAdherence.length, (index) {
+                  // Color based on adherence percentage
+                  Color barColor;
+                  if (weeklyAdherence[index] >= 80) {
+                    barColor = Colors.green;
+                  } else if (weeklyAdherence[index] >= 60) {
+                    barColor = Colors.orange;
+                  } else {
+                    barColor = Colors.red;
+                  }
+                  
+                  return BarChartGroupData(
+                    x: index,
+                    barRods: [
+                      BarChartRodData(
+                        toY: weeklyAdherence[index],
+                        color: barColor,
+                        width: 12,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ],
+                  );
+                }),
               ),
             ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: ListView(
-                children: [
-                  _buildWeeklyStatCard(
-                    'Calories',
-                    _weeklyCalories,
-                    Colors.orange,
-                    'kcal',
-                  ),
-                  const SizedBox(height: 16),
-                  _buildWeeklyStatCard(
-                    'Workouts',
-                    _weeklyWorkoutMinutes,
-                    Colors.green,
-                    'min',
-                  ),
-                  const SizedBox(height: 16),
-                  _buildWeeklyStatCard(
-                    'Sleep',
-                    _weeklySleepHours,
-                    Colors.purple,
-                    'h',
-                  ),
-                ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Total doses: ${_getTotalDoses()}',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
-            ),
-          ],
-        ),
+              Text(
+                'Taken: ${_getTakenCount()}',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${_getAdherencePercentage()}% today',
+                  style: const TextStyle(color: Colors.purple, fontSize: 10, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildWeeklyStatCard(String title, List<double> data, Color color, String unit) {
     final average = (data.reduce((a, b) => a + b) / data.length).toStringAsFixed(1);
@@ -1170,19 +2042,35 @@ class _AddMealDialogState extends State<AddMealDialog> {
   }
 
   int get _totalCalories {
-    return _selectedFoods.fold(0, (sum, food) => sum + food.calories);
+    int total = 0;
+    for (var food in _selectedFoods) {
+      total += food.calories;
+    }
+    return total;
   }
 
   double get _totalProtein {
-    return _selectedFoods.fold(0, (sum, food) => sum + food.protein);
+    double total = 0.0;
+    for (var food in _selectedFoods) {
+      total += food.protein;
+    }
+    return total;
   }
 
   double get _totalCarbs {
-    return _selectedFoods.fold(0, (sum, food) => sum + food.carbs);
+    double total = 0.0;
+    for (var food in _selectedFoods) {
+      total += food.carbs;
+    }
+    return total;
   }
 
   double get _totalFat {
-    return _selectedFoods.fold(0, (sum, food) => sum + food.fat);
+    double total = 0.0;
+    for (var food in _selectedFoods) {
+      total += food.fat;
+    }
+    return total;
   }
 
   Future<Meal?> _saveMeal() async {

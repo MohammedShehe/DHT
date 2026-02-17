@@ -157,7 +157,6 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => _isLoading = true);
     
     try {
-      print('Starting Google Sign-In process for registration...');
       
       // Sign out first to ensure fresh login
       await _googleSignIn.signOut();
@@ -167,18 +166,14 @@ class _RegisterPageState extends State<RegisterPage> {
       
       if (googleUser == null) {
         // User cancelled the sign-in
-        print('User cancelled Google Sign-In');
         setState(() => _isLoading = false);
         return;
       }
       
-      print('Google User: ${googleUser.email}, ID: ${googleUser.id}');
       
       // Get authentication details
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       
-      print('Google Auth - ID Token: ${googleAuth.idToken}');
-      print('Google Auth - Access Token: ${googleAuth.accessToken}');
       
       // ✅ NEW FLOW: Check if user exists first
       await _handleGoogleRegistration(
@@ -187,7 +182,6 @@ class _RegisterPageState extends State<RegisterPage> {
       );
       
     } catch (e) {
-      print('Google Sign-In Error: $e');
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(

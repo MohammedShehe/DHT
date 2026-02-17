@@ -127,11 +127,8 @@ class _LoginPageState extends State<LoginPage> {
   void _signInWithGoogle() async {
     setState(() => _isLoading = true);
 
-    // DEBUG: Print current backend URL
-    print('🌐 Current backend URL: ${AuthService.baseUrl}');
     
     try {
-      print('Starting Google Sign-In process for login...');
       
       // Sign out first to ensure fresh login
       await _googleSignIn.signOut();
@@ -141,18 +138,14 @@ class _LoginPageState extends State<LoginPage> {
       
       if (googleUser == null) {
         // User cancelled the sign-in
-        print('User cancelled Google Sign-In');
         setState(() => _isLoading = false);
         return;
       }
       
-      print('Google User: ${googleUser.email}, ID: ${googleUser.id}');
       
       // Get authentication details
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       
-      print('Google Auth - ID Token: ${googleAuth.idToken}');
-      print('Google Auth - Access Token: ${googleAuth.accessToken}');
       
       // ✅ Process Google login
       await _processGoogleLogin(
@@ -161,7 +154,6 @@ class _LoginPageState extends State<LoginPage> {
       );
       
     } catch (e) {
-      print('Google Sign-In Error: $e');
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(

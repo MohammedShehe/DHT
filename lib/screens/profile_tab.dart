@@ -3,7 +3,6 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-import '../services/auth_service.dart';
 import '../services/profile_service.dart';
 import '../services/account_service.dart';
 import '../services/password_setup_service.dart';

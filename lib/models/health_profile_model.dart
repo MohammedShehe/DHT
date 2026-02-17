@@ -46,7 +46,6 @@ class HealthProfileModel {
   });
 
   factory HealthProfileModel.fromJson(Map<String, dynamic> json) {
-    print('Converting JSON to HealthProfileModel: $json');
     
     return HealthProfileModel(
       id: json['id'] as int?,
