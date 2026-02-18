@@ -1,11 +1,14 @@
-// Add this new file: add_hydration_dialog.dart
-
+// lib/widgets/add_hydration_dialog.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../models/activity_models.dart';
+import '../providers/activity_provider.dart';
 
 class AddHydrationDialog extends StatefulWidget {
-  const AddHydrationDialog({super.key});
+  final DateTime? selectedDate;
+
+  const AddHydrationDialog({super.key, this.selectedDate});
 
   @override
   State<AddHydrationDialog> createState() => _AddHydrationDialogState();
@@ -35,6 +38,33 @@ class _AddHydrationDialogState extends State<AddHydrationDialog> {
   void dispose() {
     _notesController.dispose();
     super.dispose();
+  }
+
+  void _saveHydration() {
+    if (_formKey.currentState!.validate()) {
+      final now = DateTime.now();
+      final selectedDate = widget.selectedDate ?? now;
+      final hydrationTime = DateTime(
+        selectedDate.year, selectedDate.month, selectedDate.day,
+        _selectedTime.hour, _selectedTime.minute,
+      );
+      
+      final hydration = Hydration(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        amount: _amount,
+        time: hydrationTime,
+        type: _selectedType,
+        notes: _notesController.text.isEmpty ? null : _notesController.text,
+      );
+      
+      // Use provider to add hydration
+      final provider = Provider.of<ActivityProvider>(context, listen: false);
+      provider.addHydration(hydration);
+      
+      if (mounted) {
+        Navigator.pop(context);
+      }
+    }
   }
 
   @override
@@ -245,32 +275,7 @@ class _AddHydrationDialogState extends State<AddHydrationDialog> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () {
-                          if (_formKey.currentState!.validate()) {
-                            final now = DateTime.now();
-                            final hydrationTime = DateTime(
-                              now.year, now.month, now.day,
-                              _selectedTime.hour, _selectedTime.minute,
-                            );
-                            
-                            final hydration = Hydration(
-                              id: DateTime.now().millisecondsSinceEpoch.toString(),
-                              amount: _amount,
-                              time: hydrationTime,
-                              type: _selectedType,
-                              notes: _notesController.text.isEmpty ? null : _notesController.text,
-                            );
-                            
-                            Navigator.pop(context, hydration);
-                            
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Added ${_amount}ml $_selectedType'),
-                                backgroundColor: Colors.blue,
-                              ),
-                            );
-                          }
-                        },
+                        onPressed: _saveHydration,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.blue,
                           foregroundColor: Colors.white,

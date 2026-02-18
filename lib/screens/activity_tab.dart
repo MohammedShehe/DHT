@@ -1,17 +1,18 @@
+// lib/screens/activity_tab.dart
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/activity_models.dart';
-import '../models/food_model.dart';
+import '../providers/activity_provider.dart';
 import '../widgets/date_selector.dart';
 import '../widgets/progress_chart.dart';
 import '../widgets/activity_cards.dart';
-import '../widgets/food_selection_widget.dart';
-import '../widgets/custom_food_dialog.dart';
+import '../widgets/add_meal_dialog.dart';
+import '../widgets/add_workout_dialog.dart';
+import '../widgets/add_sleep_dialog.dart';
 import '../widgets/add_hydration_dialog.dart';
 import '../widgets/add_medication_dialog.dart';
-import '../providers/activity_provider.dart';
 
 class ActivityTab extends StatefulWidget {
   const ActivityTab({super.key});
@@ -23,135 +24,6 @@ class ActivityTab extends StatefulWidget {
 class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   DateTime _selectedDate = DateTime.now();
-  bool _isLoading = false;
-
-  // Sample data - replace with actual data from service
-  final Map<String, dynamic> _mealData = {
-    'totalCalories': 1850,
-    'goalCalories': 2200,
-    'protein': 65,
-    'carbs': 210,
-    'fat': 55,
-    'water': 4,
-    'meals': [
-      {
-        'type': 'Breakfast', 
-        'calories': 450, 
-        'time': '08:30 AM', 
-        'items': 'Oatmeal (1 cup), Banana (1 medium), Coffee (1 cup)',
-        'protein': 12,
-        'carbs': 65,
-        'fat': 8
-      },
-      {
-        'type': 'Lunch', 
-        'calories': 650, 
-        'time': '01:00 PM', 
-        'items': 'Grilled Chicken (150g), Salad (2 cups), Olive Oil (2 tbsp)',
-        'protein': 35,
-        'carbs': 15,
-        'fat': 22
-      },
-      {
-        'type': 'Snack', 
-        'calories': 250, 
-        'time': '04:30 PM', 
-        'items': 'Greek Yogurt (150g), Apple (1 medium)',
-        'protein': 15,
-        'carbs': 30,
-        'fat': 5
-      },
-      {
-        'type': 'Dinner', 
-        'calories': 500, 
-        'time': '07:45 PM', 
-        'items': 'Salmon (150g), Quinoa (1 cup), Veggies (1 cup)',
-        'protein': 32,
-        'carbs': 40,
-        'fat': 18
-      },
-    ]
-  };
-
-  final Map<String, dynamic> _workoutData = {
-    'totalMinutes': 65,
-    'goalMinutes': 60,
-    'caloriesBurned': 450,
-    'workouts': [
-      {'type': 'Morning Run', 'duration': 25, 'calories': 180, 'time': '07:00 AM', 'intensity': 'Moderate'},
-      {'type': 'Weight Training', 'duration': 40, 'calories': 270, 'time': '06:00 PM', 'intensity': 'High'},
-    ]
-  };
-
-  final Map<String, dynamic> _sleepData = {
-    'totalHours': 7.5,
-    'goalHours': 8,
-    'quality': 'Good',
-    'deepSleep': 2.5,
-    'remSleep': 1.8,
-    'lightSleep': 3.2,
-    'bedTime': '11:00 PM',
-    'wakeTime': '06:30 AM',
-    'interruptions': 2,
-  };
-
-  // Hydration data
-  final Map<String, dynamic> _hydrationData = {
-    'totalAmount': 1850, // ml
-    'goalAmount': 2500, // ml (8 glasses)
-    'glasses': 7, // 250ml each
-    'entries': [
-      {'amount': 250, 'time': '08:30 AM', 'type': 'Water'},
-      {'amount': 500, 'time': '12:00 PM', 'type': 'Water'},
-      {'amount': 250, 'time': '03:30 PM', 'type': 'Water'},
-      {'amount': 350, 'time': '06:00 PM', 'type': 'Sports Drink'},
-      {'amount': 250, 'time': '08:30 PM', 'type': 'Water'},
-      {'amount': 250, 'time': '10:00 PM', 'type': 'Water'},
-    ]
-  };
-
-  // Medications data
-  final List<Map<String, dynamic>> _medicationsData = [
-    {
-      'id': '1',
-      'name': 'Vitamin D',
-      'dosage': '1000',
-      'unit': 'IU',
-      'times': ['08:00 AM', '08:00 PM'],
-      'taken': [true, false],
-      'color': Colors.orange.value,
-      'instructions': 'Take with food',
-      'prescribedBy': 'Dr. Smith',
-    },
-    {
-      'id': '2',
-      'name': 'Metformin',
-      'dosage': '500',
-      'unit': 'mg',
-      'times': ['08:00 AM', '02:00 PM', '08:00 PM'],
-      'taken': [true, false, false],
-      'color': Colors.blue.value,
-      'instructions': 'Take after meals',
-      'prescribedBy': 'Dr. Johnson',
-    },
-    {
-      'id': '3',
-      'name': 'Lisinopril',
-      'dosage': '10',
-      'unit': 'mg',
-      'times': ['09:00 AM'],
-      'taken': [true],
-      'color': Colors.green.value,
-      'instructions': 'Take in morning',
-      'prescribedBy': 'Dr. Williams',
-    },
-  ];
-
-  // Weekly data for charts
-  final List<double> _weeklyCalories = [1650, 1800, 2100, 1950, 1850, 2000, 1750];
-  final List<double> _weeklyWorkoutMinutes = [45, 60, 30, 70, 0, 55, 65];
-  final List<double> _weeklySleepHours = [6.5, 7.0, 8.0, 7.5, 6.0, 8.5, 7.5];
-  final List<double> _weeklyHydration = [1800, 2100, 1950, 2300, 2100, 1850, 2000];
 
   @override
   void initState() {
@@ -172,9 +44,10 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
           );
         }
       };
+      
+      // Load initial data
+      provider.loadActivityData();
     });
-    
-    _loadActivityData();
   }
 
   @override
@@ -182,7 +55,7 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     // Clean up the callback
     try {
       final provider = Provider.of<ActivityProvider>(context, listen: false);
-      provider.onShowMessage = null;
+      provider.disposeCallbacks();
     } catch (e) {
       // Provider might not be available during dispose
     }
@@ -190,29 +63,12 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     super.dispose();
   }
 
-  Future<void> _loadActivityData() async {
-    setState(() => _isLoading = true);
-    try {
-      // Load data from service
-      // final meals = await ActivityService.getMeals(_selectedDate);
-      // final workouts = await ActivityService.getWorkouts(_selectedDate);
-      // final sleep = await ActivityService.getSleep(_selectedDate);
-      // final hydration = await ActivityService.getHydration(_selectedDate);
-      // final medications = await ActivityService.getMedications();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading data: $e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
   void _onDateChanged(DateTime date) {
     setState(() {
       _selectedDate = date;
     });
-    _loadActivityData();
+    final provider = Provider.of<ActivityProvider>(context, listen: false);
+    provider.setSelectedDate(date);
   }
 
   void _showAddMealDialog() {
@@ -220,41 +76,14 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const AddMealDialog(),
-    ).then((meal) {
-      if (meal != null) {
-        // Add the meal to your data
-        setState(() {
-          _mealData['meals'].insert(0, {
-            'type': meal.type,
-            'calories': meal.calories,
-            'time': meal.time,
-            'items': meal.items,
-            'protein': meal.protein,
-            'carbs': meal.carbs,
-            'fat': meal.fat,
-          });
-          
-          // Update totals with proper type casting
-          int totalCalories = 0;
-          double totalProtein = 0.0;
-          double totalCarbs = 0.0;
-          double totalFat = 0.0;
-          
-          for (var m in _mealData['meals']) {
-            totalCalories += m['calories'] as int;
-            totalProtein += (m['protein']?.toDouble() ?? 0.0);
-            totalCarbs += (m['carbs']?.toDouble() ?? 0.0);
-            totalFat += (m['fat']?.toDouble() ?? 0.0);
-          }
-          
-          _mealData['totalCalories'] = totalCalories;
-          _mealData['protein'] = totalProtein.round();
-          _mealData['carbs'] = totalCarbs.round();
-          _mealData['fat'] = totalFat.round();
-        });
-      }
-    });
+      builder: (context) => AddMealDialog(
+        selectedDate: _selectedDate,
+        mealType: _tabController.index == 0 ? null : 
+                  _tabController.index == 1 ? 'Lunch' :
+                  _tabController.index == 2 ? 'Dinner' :
+                  _tabController.index == 3 ? 'Snack' : 'Breakfast',
+      ),
+    );
   }
 
   void _showAddWorkoutDialog() {
@@ -263,7 +92,7 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => const AddWorkoutDialog(),
-    ).then((_) => _loadActivityData());
+    );
   }
 
   void _showAddSleepDialog() {
@@ -272,7 +101,7 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => const AddSleepDialog(),
-    ).then((_) => _loadActivityData());
+    );
   }
 
   void _showAddHydrationDialog() {
@@ -280,27 +109,10 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const AddHydrationDialog(),
-    ).then((hydration) {
-      if (hydration != null) {
-        setState(() {
-          _hydrationData['entries'].insert(0, {
-            'amount': hydration.amount,
-            'time': DateFormat.jm().format(hydration.time),
-            'type': hydration.type ?? 'Water',
-          });
-          
-          // Update totals with proper type casting
-          int totalAmount = 0;
-          for (var entry in _hydrationData['entries']) {
-            totalAmount += entry['amount'] as int;
-          }
-          
-          _hydrationData['totalAmount'] = totalAmount;
-          _hydrationData['glasses'] = (totalAmount / 250).round();
-        });
-      }
-    });
+      builder: (context) => AddHydrationDialog(
+        selectedDate: _selectedDate,
+      ),
+    );
   }
 
   void _showAddMedicationDialog() {
@@ -309,18 +121,43 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => const AddMedicationDialog(),
-    ).then((medicationJson) {
-      if (medicationJson != null) {
-        // Use the provider to add the medication
-        final provider = Provider.of<ActivityProvider>(context, listen: false);
-        provider.addMedication(medicationJson);
-        
-        // Also update local state for immediate UI update
-        setState(() {
-          _medicationsData.add(medicationJson as Map<String, dynamic>);
-        });
-      }
-    });
+    );
+  }
+
+  void _showDatePicker() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF00C853),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    
+    if (picked != null && picked != _selectedDate) {
+      _onDateChanged(picked);
+    }
+  }
+
+  void _showWeeklySummary() {
+    final provider = Provider.of<ActivityProvider>(context, listen: false);
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => WeeklySummarySheet(provider: provider),
+    );
   }
 
   @override
@@ -348,36 +185,46 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
         actions: [
           IconButton(
             icon: const Icon(Icons.calendar_today),
-            onPressed: () => _showDatePicker(),
+            onPressed: _showDatePicker,
           ),
           IconButton(
             icon: const Icon(Icons.bar_chart),
-            onPressed: () => _showWeeklySummary(),
+            onPressed: _showWeeklySummary,
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)))
-          : Column(
-              children: [
-                DateSelector(
-                  selectedDate: _selectedDate,
-                  onDateChanged: _onDateChanged,
+      body: Consumer<ActivityProvider>(
+        builder: (context, provider, child) {
+          if (provider.isLoading) {
+            return const Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFF00C853),
+              ),
+            );
+          }
+
+          return Column(
+            children: [
+              DateSelector(
+                selectedDate: _selectedDate,
+                onDateChanged: _onDateChanged,
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    MealsTab(provider: provider),
+                    WorkoutsTab(provider: provider),
+                    SleepTab(provider: provider),
+                    HydrationTab(provider: provider),
+                    MedicationsTab(provider: provider),
+                  ],
                 ),
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildMealsTab(),
-                      _buildWorkoutsTab(),
-                      _buildSleepTab(),
-                      _buildHydrationTab(),
-                      _buildMedicationsTab(),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
+          );
+        },
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           if (_tabController.index == 0) {
@@ -404,8 +251,16 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
       ),
     );
   }
+}
 
-  Widget _buildMealsTab() {
+// Individual Tab Widgets
+class MealsTab extends StatelessWidget {
+  final ActivityProvider provider;
+
+  const MealsTab({super.key, required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -425,14 +280,14 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '${_mealData['totalCalories']} / ${_mealData['goalCalories']} kcal',
+                    '${provider.totalCalories} / 2200 kcal',
                     style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
                     height: 200,
                     child: ProgressChart.bar(
-                      data: _weeklyCalories,
+                      data: provider.weeklyCalories,
                       labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
                       color: Colors.orange,
                       title: 'Weekly Calories',
@@ -462,7 +317,7 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
                       Expanded(
                         child: _buildNutrientCard(
                           'Protein',
-                          '${_mealData['protein']}g',
+                          '${provider.totalProtein.toStringAsFixed(0)}g',
                           150,
                           Colors.blue,
                         ),
@@ -470,7 +325,7 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
                       Expanded(
                         child: _buildNutrientCard(
                           'Carbs',
-                          '${_mealData['carbs']}g',
+                          '${provider.totalCarbs.toStringAsFixed(0)}g',
                           300,
                           Colors.green,
                         ),
@@ -478,7 +333,7 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
                       Expanded(
                         child: _buildNutrientCard(
                           'Fat',
-                          '${_mealData['fat']}g',
+                          '${provider.totalFat.toStringAsFixed(0)}g',
                           70,
                           Colors.orange,
                         ),
@@ -518,19 +373,11 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${_mealData['water']} / 8 glasses',
+                          '${provider.waterGlasses} / 8 glasses',
                           style: TextStyle(color: Colors.grey[600]),
                         ),
                       ],
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.add_circle, color: Color(0xFF00C853)),
-                    onPressed: () {
-                      setState(() {
-                        _mealData['water'] = (_mealData['water'] + 1).clamp(0, 8);
-                      });
-                    },
                   ),
                 ],
               ),
@@ -544,551 +391,34 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
           ),
           const SizedBox(height: 12),
           
-          ...List.generate(_mealData['meals'].length, (index) {
-            final meal = _mealData['meals'][index];
-            return ActivityCard.meal(
-              meal: Meal(
-                id: index.toString(),
-                type: meal['type'],
-                calories: meal['calories'],
-                time: meal['time'],
-                items: meal['items'],
-                protein: meal['protein']?.toDouble(),
-                carbs: meal['carbs']?.toDouble(),
-                fat: meal['fat']?.toDouble(),
-              ),
-              onTap: () => _showMealDetails(meal),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWorkoutsTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Workout Duration',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${_workoutData['totalMinutes']} / ${_workoutData['goalMinutes']} minutes',
-                    style: const TextStyle(fontSize: 14, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 200,
-                    child: ProgressChart.line(
-                      data: _weeklyWorkoutMinutes,
-                      labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
-                      color: Colors.green,
-                      title: 'Weekly Workouts',
+          if (provider.meals.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Icon(Icons.restaurant, size: 64, color: Colors.grey[300]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No meals logged today',
+                      style: TextStyle(color: Colors.grey[600]),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatCard(
-                  'Calories Burned',
-                  '${_workoutData['caloriesBurned']}',
-                  Icons.local_fire_department,
-                  Colors.orange,
+                  ],
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildStatCard(
-                  'Active Minutes',
-                  '${_workoutData['totalMinutes']}',
-                  Icons.timer,
-                  Colors.green,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          const Text(
-            "Today's Workouts",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 12),
-          ...List.generate(_workoutData['workouts'].length, (index) {
-            final workout = _workoutData['workouts'][index];
-            return ActivityCard.workout(
-              workout: Workout(
-                id: index.toString(),
-                type: workout['type'],
-                duration: workout['duration'],
-                calories: workout['calories'],
-                time: workout['time'],
-                intensity: workout['intensity'],
-              ),
-              onTap: () => _showWorkoutDetails(workout),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSleepTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Sleep Duration',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${_sleepData['totalHours']} / ${_sleepData['goalHours']} hours',
-                    style: const TextStyle(fontSize: 14, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 200,
-                    child: ProgressChart.bar(
-                      data: _weeklySleepHours,
-                      labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
-                      color: Colors.purple,
-                      title: 'Weekly Sleep',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Sleep Quality',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: _getSleepQualityColor(_sleepData['quality']).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          _sleepData['quality'],
-                          style: TextStyle(
-                            color: _getSleepQualityColor(_sleepData['quality']),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  _buildSleepStageRow('Deep Sleep', _sleepData['deepSleep'], Colors.purple),
-                  _buildSleepStageRow('REM Sleep', _sleepData['remSleep'], Colors.blue),
-                  _buildSleepStageRow('Light Sleep', _sleepData['lightSleep'], Colors.green),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildSleepTimeCard(
-                          'Bedtime',
-                          _sleepData['bedTime'],
-                          Icons.nightlight_round,
-                          Colors.indigo,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildSleepTimeCard(
-                          'Wake up',
-                          _sleepData['wakeTime'],
-                          Icons.wb_sunny,
-                          Colors.orange,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Interruptions'),
-                        Text(
-                          '${_sleepData['interruptions']} times',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHydrationTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Water Intake',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.water_drop, color: Colors.blue, size: 16),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${_hydrationData['glasses']} glasses',
-                              style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Progress circle
-                  Center(
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        SizedBox(
-                          width: 180,
-                          height: 180,
-                          child: CircularProgressIndicator(
-                            value: (_hydrationData['totalAmount'] as int) / (_hydrationData['goalAmount'] as int),
-                            backgroundColor: Colors.blue.withOpacity(0.1),
-                            color: Colors.blue,
-                            strokeWidth: 12,
-                          ),
-                        ),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '${_hydrationData['totalAmount']}ml',
-                              style: const TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.blue,
-                              ),
-                            ),
-                            Text(
-                              'of ${_hydrationData['goalAmount']}ml',
-                              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 20),
-                  
-                  // Quick add buttons
-                  const Text(
-                    'Quick Add',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildQuickAddButton('250ml', 250, Icons.water_drop),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _buildQuickAddButton('500ml', 500, Icons.water),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _buildQuickAddButton('750ml', 750, Icons.local_drink),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Weekly chart
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Weekly Hydration',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 200,
-                    child: ProgressChart.bar(
-                      data: _weeklyHydration,
-                      labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
-                      color: Colors.blue,
-                      title: 'Weekly Hydration',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Today's entries
-          const Text(
-            "Today's Entries",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 12),
-          
-          ...List.generate(_hydrationData['entries'].length, (index) {
-            final entry = _hydrationData['entries'][index];
-            return _buildHydrationEntryCard(entry);
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMedicationsTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Summary card
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.purple.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.medication, color: Colors.purple, size: 30),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Medication Adherence',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${_getTakenCount()}/${_getTotalDoses()} doses taken today',
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.purple.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${_getAdherencePercentage()}%',
-                      style: const TextStyle(color: Colors.purple, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Active medications
-          const Text(
-            'Active Medications',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 12),
-          
-          ...List.generate(_medicationsData.length, (index) {
-            final medication = _medicationsData[index];
-            return _buildMedicationCard(medication);
-          }),
-          
-          const SizedBox(height: 16),
-          
-          // Adherence chart
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Weekly Adherence',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 150,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: 7,
-                      itemBuilder: (context, index) {
-                        final day = DateTime.now().subtract(Duration(days: 6 - index));
-                        final adherence = 70 + (index * 5); // Sample data
-                        return Container(
-                          width: 80,
-                          margin: const EdgeInsets.only(right: 12),
-                          child: Column(
-                            children: [
-                              Expanded(
-                                child: Container(
-                                  width: 40,
-                                  decoration: BoxDecoration(
-                                    color: Colors.purple.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      Container(
-                                        height: adherence * 0.8,
-                                        width: 40,
-                                        decoration: BoxDecoration(
-                                          color: adherence > 80 ? Colors.green : 
-                                                 adherence > 60 ? Colors.orange : Colors.red,
-                                          borderRadius: const BorderRadius.vertical(
-                                            top: Radius.circular(8),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                DateFormat.E().format(day).substring(0, 1),
-                                style: TextStyle(color: Colors.grey[600]),
-                              ),
-                              Text(
-                                '$adherence%',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+            )
+          else
+            ...provider.meals.map((meal) => ActivityCard.meal(
+              meal: meal,
+              onTap: () => _showMealDetails(context, meal),
+            )).toList(),
         ],
       ),
     );
   }
 
   Widget _buildNutrientCard(String label, String value, int goal, Color color) {
-    final numericValue = int.tryParse(value.replaceAll('g', '')) ?? 0;
+    final numericValue = double.tryParse(value.replaceAll('g', '')) ?? 0;
     final percentage = (numericValue / goal * 100).clamp(0, 100);
     
     return Container(
@@ -1129,6 +459,117 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     );
   }
 
+  void _showMealDetails(BuildContext context, Meal meal) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => MealDetailsSheet(meal: meal),
+    );
+  }
+}
+
+class WorkoutsTab extends StatelessWidget {
+  final ActivityProvider provider;
+
+  const WorkoutsTab({super.key, required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Workout Duration',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${provider.totalWorkoutMinutes} / 60 minutes',
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 200,
+                    child: ProgressChart.line(
+                      data: provider.weeklyWorkoutMinutes,
+                      labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+                      color: Colors.green,
+                      title: 'Weekly Workouts',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatCard(
+                  'Calories Burned',
+                  '${provider.totalCaloriesBurned}',
+                  Icons.local_fire_department,
+                  Colors.orange,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildStatCard(
+                  'Active Minutes',
+                  '${provider.totalWorkoutMinutes}',
+                  Icons.timer,
+                  Colors.green,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          const Text(
+            "Today's Workouts",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
+          
+          if (provider.workouts.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Icon(Icons.fitness_center, size: 64, color: Colors.grey[300]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No workouts logged today',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ...provider.workouts.map((workout) => ActivityCard.workout(
+              workout: workout,
+              onTap: () => _showWorkoutDetails(context, workout),
+            )).toList(),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatCard(String label, String value, IconData icon, Color color) {
     return Card(
       elevation: 2,
@@ -1153,9 +594,231 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildSleepStageRow(String label, double hours, Color color) {
-    final totalHours = _sleepData['totalHours'] as double;
-    final percentage = (hours / totalHours * 100).round();
+  void _showWorkoutDetails(BuildContext context, Workout workout) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(workout.type),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildInfoRow('Time', workout.time),
+            _buildInfoRow('Duration', '${workout.duration} min'),
+            _buildInfoRow('Calories', '${workout.calories} kcal'),
+            _buildInfoRow('Intensity', workout.intensity),
+            if (workout.notes != null) _buildInfoRow('Notes', workout.notes!),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 70,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.grey),
+            ),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
+}
+
+class SleepTab extends StatelessWidget {
+  final ActivityProvider provider;
+
+  const SleepTab({super.key, required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final sleep = provider.sleep.isNotEmpty ? provider.sleep.first : null;
+    
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Sleep Duration',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${provider.totalSleepHours.toStringAsFixed(1)} / 8 hours',
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 200,
+                    child: ProgressChart.bar(
+                      data: provider.weeklySleepHours,
+                      labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+                      color: Colors.purple,
+                      title: 'Weekly Sleep',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          if (sleep != null) ...[
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Sleep Quality',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _getSleepQualityColor(sleep.quality).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            sleep.quality,
+                            style: TextStyle(
+                              color: _getSleepQualityColor(sleep.quality),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    if (sleep.deepSleep != null)
+                      _buildSleepStageRow('Deep Sleep', sleep.deepSleep!, sleep.duration, Colors.purple),
+                    if (sleep.remSleep != null)
+                      _buildSleepStageRow('REM Sleep', sleep.remSleep!, sleep.duration, Colors.blue),
+                    if (sleep.lightSleep != null)
+                      _buildSleepStageRow('Light Sleep', sleep.lightSleep!, sleep.duration, Colors.green),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildSleepTimeCard(
+                            'Bedtime',
+                            '${sleep.bedTime.hour.toString().padLeft(2, '0')}:${sleep.bedTime.minute.toString().padLeft(2, '0')}',
+                            Icons.nightlight_round,
+                            Colors.indigo,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildSleepTimeCard(
+                            'Wake up',
+                            '${sleep.wakeTime.hour.toString().padLeft(2, '0')}:${sleep.wakeTime.minute.toString().padLeft(2, '0')}',
+                            Icons.wb_sunny,
+                            Colors.orange,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Interruptions'),
+                          Text(
+                            '${sleep.interruptions} times',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ] else
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Icon(Icons.bedtime, size: 64, color: Colors.grey[300]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No sleep data for today',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Color _getSleepQualityColor(String quality) {
+    switch (quality.toLowerCase()) {
+      case 'excellent':
+        return Colors.green;
+      case 'good':
+        return Colors.blue;
+      case 'fair':
+        return Colors.orange;
+      case 'poor':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Widget _buildSleepStageRow(String label, double hours, double total, Color color) {
+    final percentage = (hours / total * 100).round();
     
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -1165,12 +828,12 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(label, style: TextStyle(color: Colors.grey[600])),
-              Text('${hours}h ($percentage%)'),
+              Text('${hours.toStringAsFixed(1)}h ($percentage%)'),
             ],
           ),
           const SizedBox(height: 4),
           LinearProgressIndicator(
-            value: hours / totalHours,
+            value: hours / total,
             backgroundColor: color.withOpacity(0.2),
             color: color,
             borderRadius: BorderRadius.circular(4),
@@ -1204,49 +867,161 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
       ),
     );
   }
+}
 
-  Widget _buildQuickAddButton(String label, int amount, IconData icon) {
-    return ElevatedButton(
-      onPressed: () {
-        final now = DateTime.now();
-        
-        setState(() {
-          _hydrationData['entries'].insert(0, {
-            'amount': amount,
-            'time': DateFormat.jm().format(now),
-            'type': 'Water',
-          });
-          _hydrationData['totalAmount'] = (_hydrationData['totalAmount'] as int) + amount;
-          _hydrationData['glasses'] = ((_hydrationData['totalAmount'] as int) / 250).round();
-        });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Added $label of water'),
-            backgroundColor: Colors.blue,
-            duration: const Duration(seconds: 1),
-          ),
-        );
-      },
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.blue.withOpacity(0.1),
-        foregroundColor: Colors.blue,
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        padding: const EdgeInsets.symmetric(vertical: 12),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+class HydrationTab extends StatelessWidget {
+  final ActivityProvider provider;
+
+  const HydrationTab({super.key, required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final goalAmount = 2500; // 8 glasses * 250ml
+    
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 4),
-          Text(label),
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Water Intake',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.water_drop, color: Colors.blue, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${provider.waterGlasses} glasses',
+                              style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Progress circle
+                  Center(
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 180,
+                          height: 180,
+                          child: CircularProgressIndicator(
+                            value: provider.totalWaterIntake / goalAmount,
+                            backgroundColor: Colors.blue.withOpacity(0.1),
+                            color: Colors.blue,
+                            strokeWidth: 12,
+                          ),
+                        ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${provider.totalWaterIntake}ml',
+                              style: const TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.blue,
+                              ),
+                            ),
+                            Text(
+                              'of ${goalAmount}ml', // Fixed: Use goalAmount variable directly
+                              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Weekly chart
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Weekly Hydration',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 200,
+                    child: ProgressChart.bar(
+                      data: provider.weeklyHydration,
+                      labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+                      color: Colors.blue,
+                      title: 'Weekly Hydration',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Today's entries
+          const Text(
+            "Today's Entries",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
+          
+          if (provider.hydration.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Icon(Icons.water_drop, size: 64, color: Colors.grey[300]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No hydration entries today',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ...provider.hydration.map((entry) => _buildHydrationEntryCard(context, entry, provider)).toList(),
         ],
       ),
     );
   }
 
-  Widget _buildHydrationEntryCard(Map<String, dynamic> entry) {
+  Widget _buildHydrationEntryCard(BuildContext context, Hydration entry, ActivityProvider provider) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1260,8 +1035,8 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
           ),
           child: const Icon(Icons.water_drop, color: Colors.blue),
         ),
-        title: Text('${entry['amount']}ml ${entry['type']}'),
-        subtitle: Text(entry['time']),
+        title: Text('${entry.amount}ml ${entry.type ?? 'Water'}'),
+        subtitle: Text(DateFormat.jm().format(entry.time)),
         trailing: PopupMenuButton(
           icon: const Icon(Icons.more_vert),
           itemBuilder: (context) => [
@@ -1278,27 +1053,148 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
           ],
           onSelected: (value) {
             if (value == 'delete') {
-              setState(() {
-                _hydrationData['entries'].remove(entry);
-                
-                // Recalculate total amount
-                int totalAmount = 0;
-                for (var e in _hydrationData['entries']) {
-                  totalAmount += e['amount'] as int;
-                }
-                
-                _hydrationData['totalAmount'] = totalAmount;
-                _hydrationData['glasses'] = (totalAmount / 250).round();
-              });
+              provider.deleteHydration(entry.id);
             }
           },
         ),
       ),
     );
   }
+}
 
-  Widget _buildMedicationCard(Map<String, dynamic> medication) {
-    final color = Color(medication['color'] ?? Colors.purple.value);
+class MedicationsTab extends StatelessWidget {
+  final ActivityProvider provider;
+
+  const MedicationsTab({super.key, required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final today = DateTime.now();
+    final todaysMeds = provider.getMedicationsForDate(today);
+    
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Summary card
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.medication, color: Colors.purple, size: 30),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Medication Adherence',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_getTakenCount(todaysMeds)}/${_getTotalDoses(todaysMeds)} doses taken today',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${provider.getTodaysAdherence().round()}%',
+                      style: const TextStyle(color: Colors.purple, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Active medications
+          const Text(
+            'Today\'s Medications',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
+          
+          if (todaysMeds.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Icon(Icons.medication, size: 64, color: Colors.grey[300]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No medications scheduled for today',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ...todaysMeds.map((medication) => _buildMedicationCard(context, medication, provider)).toList(),
+        ],
+      ),
+    );
+  }
+
+  int _getTotalDoses(List<Medication> medications) {
+    int total = 0;
+    for (var med in medications) {
+      total += med.scheduledTimes.length;
+    }
+    return total;
+  }
+
+  int _getTakenCount(List<Medication> medications) {
+    int taken = 0;
+    for (var med in medications) {
+      for (var t in med.taken) {
+        if (t) taken++;
+      }
+    }
+    return taken;
+  }
+
+  Widget _buildMedicationCard(BuildContext context, Medication medication, ActivityProvider provider) {
+    final color = medication.color != null 
+        ? Color(int.parse(medication.color!.replaceFirst('#', '0xff')))
+        : Colors.purple;
+    
+    // Filter times for today only
+    final today = DateTime.now();
+    final todayTimes = <int, DateTime>{};
+    for (int i = 0; i < medication.scheduledTimes.length; i++) {
+      final time = medication.scheduledTimes[i];
+      if (time.year == today.year &&
+          time.month == today.month &&
+          time.day == today.day) {
+        todayTimes[i] = time;
+      }
+    }
+    
+    if (todayTimes.isEmpty) return const SizedBox();
     
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1325,20 +1221,20 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        medication['name'],
+                        medication.name,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       Text(
-                        '${medication['dosage']}${medication['unit']}',
+                        '${medication.dosage}${medication.unit}',
                         style: TextStyle(color: Colors.grey[600], fontSize: 14),
                       ),
                     ],
                   ),
                 ),
-                if (medication['prescribedBy'] != null)
+                if (medication.prescribedBy != null)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
@@ -1346,7 +1242,7 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      medication['prescribedBy'],
+                      medication.prescribedBy!,
                       style: TextStyle(color: color, fontSize: 11),
                     ),
                   ),
@@ -1356,7 +1252,7 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
             const SizedBox(height: 16),
             
             // Instructions
-            if (medication['instructions'] != null) ...[
+            if (medication.instructions != null) ...[
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -1369,7 +1265,7 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        medication['instructions'],
+                        medication.instructions!,
                         style: TextStyle(color: Colors.grey[700], fontSize: 13),
                       ),
                     ),
@@ -1386,22 +1282,27 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
             ),
             const SizedBox(height: 8),
             
-            ...List.generate(medication['times'].length, (index) {
-              final time = medication['times'][index];
-              final taken = medication['taken'][index];
-              return _buildDoseTile(time, taken, color, () {
-                setState(() {
-                  medication['taken'][index] = !medication['taken'][index];
-                });
-              });
-            }),
+            ...todayTimes.entries.map((entry) {
+              final index = entry.key;
+              final time = entry.value;
+              final taken = index < medication.taken.length ? medication.taken[index] : false;
+              return _buildDoseTile(
+                context,
+                DateFormat.jm().format(time),
+                taken,
+                color,
+                () {
+                  provider.markMedicationTaken(medication.id, index, !taken);
+                },
+              );
+            }).toList(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildDoseTile(String time, bool taken, Color color, VoidCallback onTap) {
+  Widget _buildDoseTile(BuildContext context, String time, bool taken, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1448,80 +1349,145 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
       ),
     );
   }
+}
 
-  Color _getSleepQualityColor(String quality) {
-    switch (quality.toLowerCase()) {
-      case 'excellent':
-        return Colors.green;
-      case 'good':
-        return Colors.blue;
-      case 'fair':
-        return Colors.orange;
-      case 'poor':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
+// Bottom Sheets
+class MealDetailsSheet extends StatelessWidget {
+  final Meal meal;
+
+  const MealDetailsSheet({super.key, required this.meal});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00C853).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.restaurant, color: Color(0xFF00C853)),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      meal.type,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      meal.time,
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          
+          const Text(
+            'Nutrition Facts',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
+          
+          _buildNutrientDetailRow('Calories', '${meal.calories} kcal', Colors.orange),
+          if (meal.protein != null)
+            _buildNutrientDetailRow('Protein', '${meal.protein}g', Colors.blue),
+          if (meal.carbs != null)
+            _buildNutrientDetailRow('Carbohydrates', '${meal.carbs}g', Colors.green),
+          if (meal.fat != null)
+            _buildNutrientDetailRow('Fat', '${meal.fat}g', Colors.red),
+          
+          const SizedBox(height: 20),
+          const Divider(),
+          const SizedBox(height: 12),
+          
+          const Text(
+            'Food Items',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            meal.items,
+            style: const TextStyle(fontSize: 14),
+          ),
+          
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
-  int _getTotalDoses() {
-    int total = 0;
-    for (var med in _medicationsData) {
-      total += (med['times'] as List).length;
-    }
-    return total;
-  }
-
-  int _getTakenCount() {
-    int taken = 0;
-    for (var med in _medicationsData) {
-      for (var t in med['taken']) {
-        if (t == true) taken++;
-      }
-    }
-    return taken;
-  }
-
-  int _getAdherencePercentage() {
-    final total = _getTotalDoses();
-    if (total == 0) return 0;
-    final taken = _getTakenCount();
-    return ((taken / total) * 100).round();
-  }
-
-  void _showDatePicker() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF00C853),
+  Widget _buildNutrientDetailRow(String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(
+              label == 'Calories' ? Icons.local_fire_department :
+              label == 'Protein' ? Icons.fitness_center :
+              label == 'Carbohydrates' ? Icons.energy_savings_leaf :
+              Icons.oil_barrel,
+              size: 14,
+              color: color,
             ),
           ),
-          child: child!,
-        );
-      },
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
     );
-    
-    if (picked != null && picked != _selectedDate) {
-      _onDateChanged(picked);
-    }
   }
+}
 
-  void _showWeeklySummary() {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
-    builder: (context) => Container(
+class WeeklySummarySheet extends StatelessWidget {
+  final ActivityProvider provider;
+
+  const WeeklySummarySheet({super.key, required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
       padding: const EdgeInsets.all(20),
-      height: MediaQuery.of(context).size.height * 0.9, // Increased height to accommodate 5 items
+      height: MediaQuery.of(context).size.height * 0.9,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1537,178 +1503,40 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
               children: [
                 _buildWeeklyStatCard(
                   'Calories',
-                  _weeklyCalories,
+                  provider.weeklyCalories,
                   Colors.orange,
                   'kcal',
                 ),
                 const SizedBox(height: 16),
                 _buildWeeklyStatCard(
                   'Workouts',
-                  _weeklyWorkoutMinutes,
+                  provider.weeklyWorkoutMinutes,
                   Colors.green,
                   'min',
                 ),
                 const SizedBox(height: 16),
                 _buildWeeklyStatCard(
                   'Sleep',
-                  _weeklySleepHours,
+                  provider.weeklySleepHours,
                   Colors.purple,
                   'h',
                 ),
                 const SizedBox(height: 16),
                 _buildWeeklyStatCard(
                   'Hydration',
-                  _weeklyHydration,
+                  provider.weeklyHydration,
                   Colors.blue,
                   'ml',
                 ),
                 const SizedBox(height: 16),
-                // Add Medication Adherence card
-                _buildMedicationWeeklyCard(),
+                _buildMedicationWeeklyCard(context, provider),
               ],
             ),
           ),
         ],
       ),
-    ),
-  );
-}
-
-// Add this new method for medication weekly summary
-Widget _buildMedicationWeeklyCard() {
-  // Sample medication adherence data for the week
-  // In a real app, this would come from your provider
-  final List<double> weeklyAdherence = [85, 90, 75, 95, 80, 70, 88]; // Sample percentages
-  
-  return Card(
-    elevation: 2,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Medication Adherence',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.purple.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Avg: ${(weeklyAdherence.reduce((a, b) => a + b) / weeklyAdherence.length).toStringAsFixed(1)}%',
-                  style: const TextStyle(color: Colors.purple, fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 100,
-            child: BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceAround,
-                maxY: 100,
-                barTouchData: BarTouchData(enabled: false),
-                titlesData: FlTitlesData(
-                  show: true,
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-                        if (value.toInt() >= 0 && value.toInt() < days.length) {
-                          return Text(
-                            days[value.toInt()],
-                            style: const TextStyle(fontSize: 10),
-                          );
-                        }
-                        return const Text('');
-                      },
-                    ),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      interval: 25,
-                      getTitlesWidget: (value, meta) {
-                        if (value == 0 || value == 25 || value == 50 || value == 75 || value == 100) {
-                          return Text('${value.toInt()}%', style: const TextStyle(fontSize: 8));
-                        }
-                        return const Text('');
-                      },
-                    ),
-                  ),
-                  topTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  rightTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                barGroups: List.generate(weeklyAdherence.length, (index) {
-                  // Color based on adherence percentage
-                  Color barColor;
-                  if (weeklyAdherence[index] >= 80) {
-                    barColor = Colors.green;
-                  } else if (weeklyAdherence[index] >= 60) {
-                    barColor = Colors.orange;
-                  } else {
-                    barColor = Colors.red;
-                  }
-                  
-                  return BarChartGroupData(
-                    x: index,
-                    barRods: [
-                      BarChartRodData(
-                        toY: weeklyAdherence[index],
-                        color: barColor,
-                        width: 12,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ],
-                  );
-                }),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Total doses: ${_getTotalDoses()}',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-              ),
-              Text(
-                'Taken: ${_getTakenCount()}',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.purple.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '${_getAdherencePercentage()}% today',
-                  style: const TextStyle(color: Colors.purple, fontSize: 10, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildWeeklyStatCard(String title, List<double> data, Color color, String unit) {
     final average = (data.reduce((a, b) => a + b) / data.length).toStringAsFixed(1);
@@ -1805,100 +1633,60 @@ Widget _buildMedicationWeeklyCard() {
     );
   }
 
-  void _showMealDetails(Map<String, dynamic> meal) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
+  Widget _buildMedicationWeeklyCard(BuildContext context, ActivityProvider provider) {
+    final todayMeds = provider.getMedicationsForDate(DateTime.now());
+    final totalDoses = todayMeds.fold(0, (sum, med) => sum + med.scheduledTimes.length);
+    final takenDoses = todayMeds.fold(0, (sum, med) => sum + med.taken.where((t) => t).length);
+    
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                const Text(
+                  'Medication Adherence',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
                 Container(
-                  width: 50,
-                  height: 50,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF00C853).withOpacity(0.1),
+                    color: Colors.purple.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.restaurant, color: Color(0xFF00C853)),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        meal['type'],
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        meal['time'],
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                    ],
+                  child: Text(
+                    'Today: ${provider.getTodaysAdherence().round()}%',
+                    style: const TextStyle(color: Colors.purple, fontSize: 12),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-            
-            const Text(
-              'Nutrition Facts',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
             const SizedBox(height: 12),
-            
-            _buildNutrientDetailRow('Calories', '${meal['calories']} kcal', Colors.orange),
-            if (meal['protein'] != null)
-              _buildNutrientDetailRow('Protein', '${meal['protein']}g', Colors.blue),
-            if (meal['carbs'] != null)
-              _buildNutrientDetailRow('Carbohydrates', '${meal['carbs']}g', Colors.green),
-            if (meal['fat'] != null)
-              _buildNutrientDetailRow('Fat', '${meal['fat']}g', Colors.red),
-            
-            const SizedBox(height: 20),
-            const Divider(),
-            const SizedBox(height: 12),
-            
-            const Text(
-              'Food Items',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              meal['items'],
-              style: const TextStyle(fontSize: 14),
-            ),
-            
-            const SizedBox(height: 20),
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Close'),
-                  ),
+                Text(
+                  'Total doses: $totalDoses',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      // Edit functionality
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00C853),
-                    ),
-                    child: const Text('Edit'),
+                Text(
+                  'Taken: $takenDoses',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${provider.getTodaysAdherence().round()}%',
+                    style: const TextStyle(color: Colors.purple, fontSize: 10, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -1906,884 +1694,6 @@ Widget _buildMedicationWeeklyCard() {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildNutrientDetailRow(String label, String value, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Container(
-            width: 24,
-            height: 24,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Icon(
-              label == 'Calories' ? Icons.local_fire_department :
-              label == 'Protein' ? Icons.fitness_center :
-              label == 'Carbohydrates' ? Icons.energy_savings_leaf :
-              Icons.oil_barrel,
-              size: 14,
-              color: color,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-          ),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showWorkoutDetails(Map<String, dynamic> workout) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(workout['type']),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildInfoRow('Time', workout['time']),
-            _buildInfoRow('Duration', '${workout['duration']} min'),
-            _buildInfoRow('Calories', '${workout['calories']} kcal'),
-            _buildInfoRow('Intensity', workout['intensity']),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // Edit functionality
-            },
-            child: const Text('Edit', style: TextStyle(color: Color(0xFF00C853))),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 70,
-            child: Text(
-              '$label:',
-              style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.grey),
-            ),
-          ),
-          Expanded(child: Text(value)),
-        ],
-      ),
-    );
-  }
-}
-
-// Add Meal Dialog - Updated with Food Selection
-class AddMealDialog extends StatefulWidget {
-  const AddMealDialog({super.key});
-
-  @override
-  State<AddMealDialog> createState() => _AddMealDialogState();
-}
-
-class _AddMealDialogState extends State<AddMealDialog> {
-  final _formKey = GlobalKey<FormState>();
-  String _mealType = 'Breakfast';
-  TimeOfDay _selectedTime = TimeOfDay.now();
-  
-  List<LoggedFood> _selectedFoods = [];
-  bool _showFoodSelector = false;
-
-  final List<String> _mealTypes = [
-    'Breakfast',
-    'Lunch',
-    'Dinner',
-    'Snack',
-    'Brunch',
-  ];
-
-  void _addFood(FoodItem food, double quantity, String unit) {
-    final loggedFood = LoggedFood(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      food: food,
-      quantity: quantity,
-      servingUnit: unit,
-      time: DateTime.now(),
-      mealType: _mealType,
-    );
-    
-    setState(() {
-      _selectedFoods.add(loggedFood);
-      _showFoodSelector = false;
-    });
-  }
-
-  void _removeFood(String id) {
-    setState(() {
-      _selectedFoods.removeWhere((f) => f.id == id);
-    });
-  }
-
-  int get _totalCalories {
-    int total = 0;
-    for (var food in _selectedFoods) {
-      total += food.calories;
-    }
-    return total;
-  }
-
-  double get _totalProtein {
-    double total = 0.0;
-    for (var food in _selectedFoods) {
-      total += food.protein;
-    }
-    return total;
-  }
-
-  double get _totalCarbs {
-    double total = 0.0;
-    for (var food in _selectedFoods) {
-      total += food.carbs;
-    }
-    return total;
-  }
-
-  double get _totalFat {
-    double total = 0.0;
-    for (var food in _selectedFoods) {
-      total += food.fat;
-    }
-    return total;
-  }
-
-  Future<Meal?> _saveMeal() async {
-    if (_selectedFoods.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please add at least one food item'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return null;
-    }
-
-    // Create meal from selected foods
-    final items = _selectedFoods.map((f) => 
-      '${f.food.name} (${f.quantity} ${f.servingUnit})'
-    ).join(', ');
-
-    final meal = Meal(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      type: _mealType,
-      calories: _totalCalories,
-      time: _selectedTime.format(context),
-      items: items,
-      protein: _totalProtein,
-      carbs: _totalCarbs,
-      fat: _totalFat,
-    );
-
-    Navigator.pop(context, meal);
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$_mealType logged successfully!'),
-        backgroundColor: const Color(0xFF00C853),
-      ),
-    );
-    
-    return meal;
-  }
-
-  void _showCustomFoodDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => CustomFoodDialog(
-        onFoodCreated: (food) {
-          _addFood(food, 1.0, food.servingUnit ?? 'serving');
-        },
-        categoryId: _mealType.toLowerCase(),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_showFoodSelector) {
-      return FoodSelectionWidget(
-        onFoodSelected: _addFood,
-        initialMealType: _mealType,
-        onClose: () {
-          setState(() {
-            _showFoodSelector = false;
-          });
-        },
-      );
-    }
-
-    return DraggableScrollableSheet(
-      initialChildSize: 0.9,
-      maxChildSize: 0.95,
-      minChildSize: 0.5,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: const EdgeInsets.all(20),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Log Meal',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 20),
-                
-                // Meal Type
-                DropdownButtonFormField<String>(
-                  value: _mealType,
-                  items: _mealTypes.map((type) {
-                    return DropdownMenuItem(
-                      value: type,
-                      child: Text(type),
-                    );
-                  }).toList(),
-                  onChanged: (value) => setState(() => _mealType = value!),
-                  decoration: const InputDecoration(
-                    labelText: 'Meal Type',
-                    prefixIcon: Icon(Icons.restaurant),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Time
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Time'),
-                  subtitle: Text(_selectedTime.format(context)),
-                  leading: const Icon(Icons.access_time),
-                  onTap: () async {
-                    final time = await showTimePicker(
-                      context: context,
-                      initialTime: _selectedTime,
-                    );
-                    if (time != null) {
-                      setState(() => _selectedTime = time);
-                    }
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Selected Foods List
-                if (_selectedFoods.isNotEmpty) ...[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Selected Foods',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        '${_totalCalories} kcal',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF00C853),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: ListView.builder(
-                      controller: scrollController,
-                      itemCount: _selectedFoods.length,
-                      itemBuilder: (context, index) {
-                        final food = _selectedFoods[index];
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ListTile(
-                            leading: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF00C853).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(Icons.restaurant, color: Color(0xFF00C853), size: 20),
-                            ),
-                            title: Text(food.food.name),
-                            subtitle: Text(
-                              '${food.quantity} ${food.servingUnit} • ${food.calories} kcal',
-                              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.close, size: 20),
-                              onPressed: () => _removeFood(food.id),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-
-                // Add Food Button
-                if (_selectedFoods.isEmpty)
-                  Expanded(
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.fastfood_outlined, size: 64, color: Colors.grey[300]),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No foods selected',
-                            style: TextStyle(color: Colors.grey[600]),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                // Add Food Buttons
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _showCustomFoodDialog,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Custom'),
-                          style: OutlinedButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _showFoodSelector = true;
-                            });
-                          },
-                          icon: const Icon(Icons.search),
-                          label: const Text('Search Foods'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF00C853),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Macronutrients Summary
-                if (_selectedFoods.isNotEmpty) ...[
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildSummaryItem(
-                                'Protein',
-                                '${_totalProtein.toStringAsFixed(1)}g',
-                                Colors.blue,
-                              ),
-                            ),
-                            Expanded(
-                              child: _buildSummaryItem(
-                                'Carbs',
-                                '${_totalCarbs.toStringAsFixed(1)}g',
-                                Colors.green,
-                              ),
-                            ),
-                            Expanded(
-                              child: _buildSummaryItem(
-                                'Fat',
-                                '${_totalFat.toStringAsFixed(1)}g',
-                                Colors.orange,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
-                // Save Button
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => _saveMeal(),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00C853),
-                        ),
-                        child: const Text('Save Meal'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSummaryItem(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: color,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-        ),
-      ],
-    );
-  }
-}
-
-// Add Workout Dialog
-class AddWorkoutDialog extends StatefulWidget {
-  const AddWorkoutDialog({super.key});
-
-  @override
-  State<AddWorkoutDialog> createState() => _AddWorkoutDialogState();
-}
-
-class _AddWorkoutDialogState extends State<AddWorkoutDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _workoutTypeController = TextEditingController();
-  final _durationController = TextEditingController();
-  final _caloriesController = TextEditingController();
-  String _intensity = 'Moderate';
-  TimeOfDay _selectedTime = TimeOfDay.now();
-
-  final List<String> _intensityLevels = ['Low', 'Moderate', 'High', 'Very High'];
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.8,
-      maxChildSize: 0.9,
-      minChildSize: 0.5,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: const EdgeInsets.all(20),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Log Workout',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 20),
-                Expanded(
-                  child: ListView(
-                    controller: scrollController,
-                    children: [
-                      // Workout Type
-                      TextFormField(
-                        controller: _workoutTypeController,
-                        decoration: const InputDecoration(
-                          labelText: 'Workout Type',
-                          hintText: 'e.g., Running, Weight Training',
-                          prefixIcon: Icon(Icons.fitness_center),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter workout type';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Time
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Time'),
-                        subtitle: Text(_selectedTime.format(context)),
-                        leading: const Icon(Icons.access_time),
-                        onTap: () async {
-                          final time = await showTimePicker(
-                            context: context,
-                            initialTime: _selectedTime,
-                          );
-                          if (time != null) {
-                            setState(() => _selectedTime = time);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Duration
-                      TextFormField(
-                        controller: _durationController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Duration',
-                          prefixIcon: Icon(Icons.timer),
-                          suffixText: 'minutes',
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter duration';
-                          }
-                          if (int.tryParse(value) == null) {
-                            return 'Please enter a valid number';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Calories Burned
-                      TextFormField(
-                        controller: _caloriesController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Calories Burned (Optional)',
-                          prefixIcon: Icon(Icons.local_fire_department),
-                          suffixText: 'kcal',
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Intensity
-                      DropdownButtonFormField<String>(
-                        value: _intensity,
-                        items: _intensityLevels.map((level) {
-                          return DropdownMenuItem(
-                            value: level,
-                            child: Text(level),
-                          );
-                        }).toList(),
-                        onChanged: (value) => setState(() => _intensity = value!),
-                        decoration: const InputDecoration(
-                          labelText: 'Intensity',
-                          prefixIcon: Icon(Icons.speed),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          if (_formKey.currentState!.validate()) {
-                            // Save workout
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Workout logged successfully!'),
-                                backgroundColor: Color(0xFF00C853),
-                              ),
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00C853),
-                        ),
-                        child: const Text('Save'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-// Add Sleep Dialog
-class AddSleepDialog extends StatefulWidget {
-  const AddSleepDialog({super.key});
-
-  @override
-  State<AddSleepDialog> createState() => _AddSleepDialogState();
-}
-
-class _AddSleepDialogState extends State<AddSleepDialog> {
-  final _formKey = GlobalKey<FormState>();
-  TimeOfDay _bedTime = TimeOfDay.now();
-  TimeOfDay _wakeTime = TimeOfDay.now();
-  int _interruptions = 0;
-  String _quality = 'Good';
-
-  final List<String> _qualityLevels = ['Poor', 'Fair', 'Good', 'Excellent'];
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.8,
-      maxChildSize: 0.9,
-      minChildSize: 0.5,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: const EdgeInsets.all(20),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Log Sleep',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 20),
-                Expanded(
-                  child: ListView(
-                    controller: scrollController,
-                    children: [
-                      // Bedtime
-                      ListTile(
-                        title: const Text('Bedtime'),
-                        subtitle: Text(_bedTime.format(context)),
-                        leading: const Icon(Icons.nightlight_round),
-                        onTap: () async {
-                          final time = await showTimePicker(
-                            context: context,
-                            initialTime: _bedTime,
-                          );
-                          if (time != null) {
-                            setState(() => _bedTime = time);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Wake Time
-                      ListTile(
-                        title: const Text('Wake Time'),
-                        subtitle: Text(_wakeTime.format(context)),
-                        leading: const Icon(Icons.wb_sunny),
-                        onTap: () async {
-                          final time = await showTimePicker(
-                            context: context,
-                            initialTime: _wakeTime,
-                          );
-                          if (time != null) {
-                            setState(() => _wakeTime = time);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Interruptions
-                      Row(
-                        children: [
-                          const Icon(Icons.notifications, color: Colors.grey),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Text(
-                              'Interruptions: $_interruptions',
-                              style: const TextStyle(fontSize: 16),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle),
-                            onPressed: () {
-                              if (_interruptions > 0) {
-                                setState(() => _interruptions--);
-                              }
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.add_circle),
-                            onPressed: () => setState(() => _interruptions++),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Sleep Quality
-                      DropdownButtonFormField<String>(
-                        value: _quality,
-                        items: _qualityLevels.map((level) {
-                          return DropdownMenuItem(
-                            value: level,
-                            child: Text(level),
-                          );
-                        }).toList(),
-                        onChanged: (value) => setState(() => _quality = value!),
-                        decoration: const InputDecoration(
-                          labelText: 'Sleep Quality',
-                          prefixIcon: Icon(Icons.star),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          // Calculate sleep duration
-                          final now = DateTime.now();
-                          final bedDateTime = DateTime(
-                            now.year, now.month, now.day,
-                            _bedTime.hour, _bedTime.minute,
-                          );
-                          final wakeDateTime = DateTime(
-                            now.year, now.month, now.day,
-                            _wakeTime.hour, _wakeTime.minute,
-                          );
-                          
-                          Duration sleepDuration;
-                          if (wakeDateTime.isBefore(bedDateTime)) {
-                            sleepDuration = wakeDateTime
-                                .add(const Duration(days: 1))
-                                .difference(bedDateTime);
-                          } else {
-                            sleepDuration = wakeDateTime.difference(bedDateTime);
-                          }
-
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Sleep logged! Duration: ${sleepDuration.inHours}h ${sleepDuration.inMinutes % 60}m',
-                              ),
-                              backgroundColor: const Color(0xFF00C853),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00C853),
-                        ),
-                        child: const Text('Save'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 }

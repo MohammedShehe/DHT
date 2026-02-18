@@ -1,6 +1,9 @@
+// lib/widgets/add_medication_dialog.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../models/activity_models.dart';
+import '../providers/activity_provider.dart';
 
 class AddMedicationDialog extends StatefulWidget {
   const AddMedicationDialog({super.key});
@@ -39,6 +42,12 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
   final List<String> _unitOptions = [
     'mg', 'g', 'mcg', 'ml', 'IU', 'tablet', 'capsule', 'drop', 'puff'
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _unitController.text = 'mg';
+  }
 
   @override
   void dispose() {
@@ -80,7 +89,6 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
       final now = DateTime.now();
       
       // Convert TimeOfDay to DateTime for each scheduled time
-      // Use a base date (today) for the times
       final scheduledTimes = _selectedTimes.map((time) {
         return DateTime(
           now.year, now.month, now.day,
@@ -91,34 +99,30 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
       // Initialize taken list with false for all times
       final taken = List.generate(scheduledTimes.length, (index) => false);
       
-      // Create a proper JSON map with all required fields
+      // Create medication JSON with correct structure
       final medicationJson = {
         'id': DateTime.now().millisecondsSinceEpoch.toString(),
         'name': _nameController.text.trim(),
         'dosage': _dosageController.text.trim(),
         'unit': _unitController.text.isEmpty ? 'mg' : _unitController.text.trim(),
         'scheduled_times': scheduledTimes.map((t) => t.toIso8601String()).toList(),
-        'taken': taken.map((t) => t ? 1 : 0).toList(),
+        'taken': taken,
         'start_date': _startDate.toIso8601String(),
         'end_date': _endDate?.toIso8601String(),
         'instructions': _instructionsController.text.isEmpty ? null : _instructionsController.text.trim(),
         'prescribed_by': _prescribedByController.text.isEmpty ? null : _prescribedByController.text.trim(),
         'notes': _notesController.text.isEmpty ? null : _notesController.text.trim(),
         'color': _selectedColor,
-        'is_active': 1,
+        'is_active': true,
       };
       
-      // Return the medication JSON
-      Navigator.pop(context, medicationJson);
+      // Use provider to add medication
+      final provider = Provider.of<ActivityProvider>(context, listen: false);
+      provider.addMedication(medicationJson);
       
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Added ${_nameController.text}'),
-          backgroundColor: Colors.purple,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      if (mounted) {
+        Navigator.pop(context);
+      }
     } else if (_selectedTimes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -215,7 +219,7 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: DropdownButtonFormField<String>(
-                              value: _unitController.text.isEmpty ? 'mg' : _unitController.text,
+                              value: _unitController.text,
                               items: _unitOptions.map((unit) {
                                 return DropdownMenuItem(
                                   value: unit,

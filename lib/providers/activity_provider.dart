@@ -1,3 +1,4 @@
+// lib/providers/activity_provider.dart
 import 'package:flutter/material.dart';
 import '../models/activity_models.dart';
 import '../services/activity_service.dart';
@@ -12,6 +13,12 @@ class ActivityProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
 
+  // Weekly data for charts
+  List<double> _weeklyCalories = [0, 0, 0, 0, 0, 0, 0];
+  List<double> _weeklyWorkoutMinutes = [0, 0, 0, 0, 0, 0, 0];
+  List<double> _weeklySleepHours = [0, 0, 0, 0, 0, 0, 0];
+  List<double> _weeklyHydration = [0, 0, 0, 0, 0, 0, 0];
+
   // Callback for showing messages (to be set from UI)
   Function(String message, {bool isError})? onShowMessage;
 
@@ -24,6 +31,12 @@ class ActivityProvider extends ChangeNotifier {
   DateTime get selectedDate => _selectedDate;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  
+  // Weekly data getters
+  List<double> get weeklyCalories => _weeklyCalories;
+  List<double> get weeklyWorkoutMinutes => _weeklyWorkoutMinutes;
+  List<double> get weeklySleepHours => _weeklySleepHours;
+  List<double> get weeklyHydration => _weeklyHydration;
 
   // Nutrition summary
   int get totalCalories => _meals.fold(0, (sum, meal) => sum + meal.calories);
@@ -85,7 +98,6 @@ class ActivityProvider extends ChangeNotifier {
       
       try {
         _medications = await ActivityService.getMedications();
-        // Filter out invalid medications
         _medications = _medications.where((med) {
           return med.scheduledTimes.isNotEmpty;
         }).toList();
@@ -93,12 +105,37 @@ class ActivityProvider extends ChangeNotifier {
         debugPrint('Error loading medications: $e');
         _medications = [];
       }
+
+      // Load weekly summary
+      await _loadWeeklySummary();
+      
     } catch (e) {
       _error = e.toString();
       debugPrint('Error loading activity data: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _loadWeeklySummary() async {
+    try {
+      final startDate = _selectedDate.subtract(const Duration(days: 6));
+      final summary = await ActivityService.getWeeklySummary(startDate);
+      
+      if (summary.isNotEmpty) {
+        _weeklyCalories = List<double>.from(summary['calories'] ?? [0, 0, 0, 0, 0, 0, 0]);
+        _weeklyWorkoutMinutes = List<double>.from(summary['workout_minutes'] ?? [0, 0, 0, 0, 0, 0, 0]);
+        _weeklySleepHours = List<double>.from(summary['sleep_hours'] ?? [0, 0, 0, 0, 0, 0, 0]);
+        _weeklyHydration = List<double>.from(summary['hydration'] ?? [0, 0, 0, 0, 0, 0, 0]);
+      }
+    } catch (e) {
+      debugPrint('Error loading weekly summary: $e');
+      // Initialize with zeros if error occurs
+      _weeklyCalories = [0, 0, 0, 0, 0, 0, 0];
+      _weeklyWorkoutMinutes = [0, 0, 0, 0, 0, 0, 0];
+      _weeklySleepHours = [0, 0, 0, 0, 0, 0, 0];
+      _weeklyHydration = [0, 0, 0, 0, 0, 0, 0];
     }
   }
 
@@ -265,12 +302,18 @@ class ActivityProvider extends ChangeNotifier {
       Medication medication;
       
       if (medicationData is Map<String, dynamic>) {
+        // Convert times to scheduled_times if needed
+        if (medicationData.containsKey('times') && !medicationData.containsKey('scheduled_times')) {
+          medicationData['scheduled_times'] = medicationData['times'];
+        }
+        
         // Ensure required fields exist
         if (!medicationData.containsKey('scheduled_times')) {
           medicationData['scheduled_times'] = [];
         }
         if (!medicationData.containsKey('taken')) {
-          medicationData['taken'] = [];
+          final scheduledTimes = medicationData['scheduled_times'] as List;
+          medicationData['taken'] = List.generate(scheduledTimes.length, (index) => false);
         }
         if (!medicationData.containsKey('id')) {
           medicationData['id'] = DateTime.now().millisecondsSinceEpoch.toString();
@@ -392,5 +435,10 @@ class ActivityProvider extends ChangeNotifier {
       debugPrint('Error calculating adherence: $e');
       return 0.0;
     }
+  }
+
+  // Clean up callback
+  void disposeCallbacks() {
+    onShowMessage = null;
   }
 }

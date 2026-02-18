@@ -1,3 +1,4 @@
+// lib/screens/home_tab.dart
 import 'package:flutter/material.dart';
 
 class HomeTab extends StatelessWidget {
@@ -68,11 +69,17 @@ class HomeTab extends StatelessWidget {
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        _buildMetricChip('2,450', 'Calories Burned'),
+                        Expanded(
+                          child: _buildMetricChip('2,450', 'Calories Burned'),
+                        ),
                         const SizedBox(width: 12),
-                        _buildMetricChip('8,500', 'Steps Today'),
+                        Expanded(
+                          child: _buildMetricChip('8,500', 'Steps Today'),
+                        ),
                         const SizedBox(width: 12),
-                        _buildMetricChip('7.5', 'Sleep Hours'),
+                        Expanded(
+                          child: _buildMetricChip('7.5', 'Sleep Hours'),
+                        ),
                       ],
                     ),
                   ],
@@ -149,7 +156,7 @@ class HomeTab extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             SizedBox(
-              height: 120,
+              height: 150, // Increased height to prevent overflow
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
@@ -186,38 +193,42 @@ class HomeTab extends StatelessWidget {
   }
 
   Widget _buildMetricChip(String value, String label) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
             ),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.white.withOpacity(0.8),
-              ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 9,
+              color: Colors.white.withOpacity(0.8),
             ),
-          ],
-        ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildQuickAction(IconData icon, String label, Color color) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           width: 56,
@@ -228,15 +239,17 @@ class HomeTab extends StatelessWidget {
           ),
           child: Icon(icon, color: color, size: 28),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Text(
           label,
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 9,
             fontWeight: FontWeight.w500,
             color: Colors.grey[700],
           ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );
@@ -246,6 +259,7 @@ class HomeTab extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -280,6 +294,7 @@ class HomeTab extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 width: 40,
@@ -297,6 +312,8 @@ class HomeTab extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
               Text(
@@ -305,6 +322,8 @@ class HomeTab extends StatelessWidget {
                   fontSize: 12,
                   color: Colors.grey[600],
                 ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
