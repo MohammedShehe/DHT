@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'screens/loading_page.dart';
 import 'services/auth_service.dart';
 import 'providers/activity_provider.dart';
+import 'providers/gamification_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,6 +30,7 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ActivityProvider()),
+        ChangeNotifierProvider(create: (_) => GamificationProvider()),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
