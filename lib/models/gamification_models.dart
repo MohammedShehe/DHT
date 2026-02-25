@@ -193,8 +193,9 @@ class LeaderboardEntry {
   }
 }
 
+// UPDATED Goal Types to match backend
 enum GoalType {
-  steps, calories, workoutMinutes, waterGlasses, sleepHours, meditation
+  steps, water, sleep, meditation, workouts, calories
 }
 
 enum GoalPeriod { daily, weekly, monthly }
@@ -203,47 +204,46 @@ enum GoalStatus { active, completed, expired }
 
 class Goal {
   final String id;
-  final String title;
-  final String description;
   final GoalType type;
+  final double targetValue;
   final GoalPeriod period;
-  final double target;
-  double current;
-  final DateTime startDate;
-  final DateTime? endDate;
-  GoalStatus status;
-  final int pointsReward;
-  final String? badgeRewardId;
+  double currentValue;
+  final DateTime createdAt;
   DateTime? completedAt;
+  GoalStatus status;
 
   Goal({
     required this.id,
-    required this.title,
-    required this.description,
     required this.type,
+    required this.targetValue,
     required this.period,
-    required this.target,
-    this.current = 0,
-    required this.startDate,
-    this.endDate,
-    this.status = GoalStatus.active,
-    required this.pointsReward,
-    this.badgeRewardId,
+    this.currentValue = 0,
+    required this.createdAt,
     this.completedAt,
+    this.status = GoalStatus.active,
   });
 
   double get progress {
-    if (target == 0) return 0;
-    return (current / target).clamp(0, 1);
+    if (targetValue == 0) return 0;
+    return (currentValue / targetValue).clamp(0, 1);
   }
 
+  bool get isCompleted => currentValue >= targetValue;
+
   String get formattedProgress {
-    if (type == GoalType.waterGlasses) {
-      return '${current.toInt()}/${target.toInt()} glasses';
-    } else if (type == GoalType.sleepHours) {
-      return '${current.toStringAsFixed(1)}/${target.toStringAsFixed(1)} hours';
-    } else {
-      return '${current.toInt()}/${target.toInt()}';
+    switch (type) {
+      case GoalType.water:
+        return '${currentValue.toInt()}/${targetValue.toInt()} glasses';
+      case GoalType.sleep:
+        return '${currentValue.toStringAsFixed(1)}/${targetValue.toStringAsFixed(1)} hours';
+      case GoalType.meditation:
+        return '${currentValue.toInt()}/${targetValue.toInt()} min';
+      case GoalType.workouts:
+        return '${currentValue.toInt()}/${targetValue.toInt()} workouts';
+      case GoalType.steps:
+        return '${currentValue.toInt()}/${targetValue.toInt()} steps';
+      case GoalType.calories:
+        return '${currentValue.toInt()}/${targetValue.toInt()} kcal';
     }
   }
 
@@ -253,11 +253,11 @@ class Goal {
         return Icons.directions_walk;
       case GoalType.calories:
         return Icons.local_fire_department;
-      case GoalType.workoutMinutes:
+      case GoalType.workouts:
         return Icons.fitness_center;
-      case GoalType.waterGlasses:
+      case GoalType.water:
         return Icons.local_drink;
-      case GoalType.sleepHours:
+      case GoalType.sleep:
         return Icons.bedtime;
       case GoalType.meditation:
         return Icons.self_improvement;
@@ -270,11 +270,11 @@ class Goal {
         return Colors.blue;
       case GoalType.calories:
         return Colors.orange;
-      case GoalType.workoutMinutes:
+      case GoalType.workouts:
         return Colors.green;
-      case GoalType.waterGlasses:
+      case GoalType.water:
         return Colors.cyan;
-      case GoalType.sleepHours:
+      case GoalType.sleep:
         return Colors.purple;
       case GoalType.meditation:
         return Colors.indigo;
@@ -283,48 +283,67 @@ class Goal {
 
   factory Goal.fromJson(Map<String, dynamic> json) {
     return Goal(
-      id: json['id'],
-      title: json['title'],
-      description: json['description'],
-      type: GoalType.values.firstWhere(
-        (e) => e.toString() == 'GoalType.${json['type']}',
-        orElse: () => GoalType.steps,
-      ),
-      period: GoalPeriod.values.firstWhere(
-        (e) => e.toString() == 'GoalPeriod.${json['period']}',
-        orElse: () => GoalPeriod.daily,
-      ),
-      target: json['target']?.toDouble() ?? 0,
-      current: json['current']?.toDouble() ?? 0,
-      startDate: DateTime.parse(json['startDate']),
-      endDate: json['endDate'] != null ? DateTime.parse(json['endDate']) : null,
-      status: GoalStatus.values.firstWhere(
-        (e) => e.toString() == 'GoalStatus.${json['status']}',
-        orElse: () => GoalStatus.active,
-      ),
-      pointsReward: json['pointsReward'] ?? 0,
-      badgeRewardId: json['badgeRewardId'],
-      completedAt: json['completedAt'] != null 
-          ? DateTime.parse(json['completedAt']) 
-          : null,
+      id: json['id'].toString(),
+      type: _parseGoalType(json['type']),
+      targetValue: (json['targetValue'] ?? json['target'] ?? 0).toDouble(),
+      period: _parseGoalPeriod(json['period']),
+      currentValue: (json['currentValue'] ?? json['current'] ?? 0).toDouble(),
+      createdAt: DateTime.parse(json['createdAt'] ?? json['created_at'] ?? DateTime.now().toIso8601String()),
+      completedAt: json['completedAt'] != null ? DateTime.parse(json['completedAt']) : null,
+      status: _parseGoalStatus(json['status']),
     );
+  }
+
+  static GoalType _parseGoalType(dynamic value) {
+    if (value is String) {
+      switch (value.toLowerCase()) {
+        case 'steps': return GoalType.steps;
+        case 'water': return GoalType.water;
+        case 'sleep': return GoalType.sleep;
+        case 'meditation': return GoalType.meditation;
+        case 'workouts': return GoalType.workouts;
+        case 'calories': return GoalType.calories;
+      }
+    }
+    return GoalType.steps;
+  }
+
+  static GoalPeriod _parseGoalPeriod(dynamic value) {
+    if (value is String) {
+      switch (value.toLowerCase()) {
+        case 'daily': return GoalPeriod.daily;
+        case 'weekly': return GoalPeriod.weekly;
+        case 'monthly': return GoalPeriod.monthly;
+      }
+    }
+    return GoalPeriod.daily;
+  }
+
+  static GoalStatus _parseGoalStatus(dynamic value) {
+    if (value is String) {
+      switch (value.toLowerCase()) {
+        case 'completed': return GoalStatus.completed;
+        case 'expired': return GoalStatus.expired;
+        default: return GoalStatus.active;
+      }
+    }
+    return GoalStatus.active;
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
-      'title': title,
-      'description': description,
-      'type': type.toString().split('.').last,
-      'period': period.toString().split('.').last,
-      'target': target,
-      'current': current,
-      'startDate': startDate.toIso8601String(),
-      'endDate': endDate?.toIso8601String(),
-      'status': status.toString().split('.').last,
-      'pointsReward': pointsReward,
-      'badgeRewardId': badgeRewardId,
-      'completedAt': completedAt?.toIso8601String(),
+      'type': type.toString().split('.').last.toLowerCase(),
+      'targetValue': targetValue,
+      'period': period.toString().split('.').last.toLowerCase(),
+    };
+  }
+
+  Map<String, dynamic> toUpdateJson() {
+    return {
+      'type': type.toString().split('.').last.toLowerCase(),
+      'targetValue': targetValue,
+      'period': period.toString().split('.').last.toLowerCase(),
+      'currentValue': currentValue,
     };
   }
 }

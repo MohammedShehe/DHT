@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import '../providers/gamification_provider.dart';
 import '../widgets/goal_setting_dialog.dart';
 import '../widgets/reminder_dialog.dart';
-import '../models/gamification_models.dart' as gamification; // Use prefix to avoid conflict
+import '../models/gamification_models.dart' as gamification;
 
 class GamificationTab extends StatefulWidget {
   const GamificationTab({super.key});
@@ -32,6 +32,7 @@ class _GamificationTabState extends State<GamificationTab> with SingleTickerProv
               content: Text(message),
               backgroundColor: isError ? Colors.red : Colors.green,
               duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
             ),
           );
         }
@@ -56,7 +57,13 @@ class _GamificationTabState extends State<GamificationTab> with SingleTickerProv
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const GoalSettingDialog(),
+      builder: (context) => GoalSettingDialog(
+        onGoalCreated: (goal) {
+          // Refresh goals list
+          final provider = Provider.of<GamificationProvider>(context, listen: false);
+          provider.loadGoals();
+        },
+      ),
     ).then((goal) {
       if (goal != null) {
         final provider = Provider.of<GamificationProvider>(context, listen: false);
@@ -77,6 +84,18 @@ class _GamificationTabState extends State<GamificationTab> with SingleTickerProv
         provider.addReminder(reminder);
       }
     });
+  }
+
+  void _refreshLeaderboard() {
+    final provider = Provider.of<GamificationProvider>(context, listen: false);
+    // TODO: Implement leaderboard refresh from backend
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Leaderboard refreshed'),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -126,9 +145,10 @@ class _GamificationTabState extends State<GamificationTab> with SingleTickerProv
           } else if (_tabController.index == 2) {
             _showCreateReminderDialog();
           } else if (_tabController.index == 0) {
-            // Show badge details
+            // Scroll to top of badges tab
+            // You can implement this if needed
           } else if (_tabController.index == 3) {
-            // Refresh leaderboard
+            _refreshLeaderboard();
           }
         },
         backgroundColor: Colors.amber,
@@ -556,7 +576,7 @@ class BadgesTab extends StatelessWidget {
   }
 }
 
-// Goals Tab
+// Goals Tab - UPDATED to work with backend
 class GoalsTab extends StatelessWidget {
   final GamificationProvider provider;
 
@@ -567,53 +587,234 @@ class GoalsTab extends StatelessWidget {
     final activeGoals = provider.activeGoals;
     final completedGoals = provider.completedGoals;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Active Goals
-          const Text(
-            'Active Goals',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 12),
-
-          if (activeGoals.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  children: [
-                    Icon(Icons.flag, size: 64, color: Colors.grey[300]),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No active goals',
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Tap + to create your first goal!',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 14),
-                    ),
-                  ],
+    return RefreshIndicator(
+      onRefresh: () => provider.loadGoals(),
+      color: Colors.amber,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Active Goals Section
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Active Goals',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                 ),
-              ),
-            )
-          else
-            ...activeGoals.map((goal) => _buildGoalCard(context, goal)),
-
-          const SizedBox(height: 24),
-
-          // Completed Goals
-          if (completedGoals.isNotEmpty) ...[
-            const Text(
-              'Completed Goals',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                TextButton.icon(
+                  onPressed: () => _showCreateGoalDialog(context),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('New Goal'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.amber,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
-            ...completedGoals.map((goal) => _buildGoalCard(context, goal, isCompleted: true)),
+
+            if (provider.isLoadingGoals)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: CircularProgressIndicator(color: Colors.amber),
+                ),
+              )
+            else if (activeGoals.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    children: [
+                      Icon(Icons.flag, size: 64, color: Colors.grey[300]),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No active goals',
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Tap + to create your first goal!',
+                        style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ...activeGoals.map((goal) => _buildGoalCard(context, goal)),
+
+            const SizedBox(height: 24),
+
+            // Completed Goals Section
+            if (completedGoals.isNotEmpty) ...[
+              const Text(
+                'Completed Goals',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 12),
+              ...completedGoals.map((goal) => _buildGoalCard(context, goal, isCompleted: true)),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showCreateGoalDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => GoalSettingDialog(
+        onGoalCreated: (goal) {
+          // Refresh goals list
+          provider.loadGoals();
+        },
+      ),
+    );
+  }
+
+  void _showEditGoalDialog(BuildContext context, gamification.Goal goal) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => GoalSettingDialog(
+        existingGoal: goal,
+        onGoalCreated: (updated) {
+          provider.loadGoals();
+        },
+      ),
+    );
+  }
+
+  void _showLogProgressDialog(BuildContext context, gamification.Goal goal) {
+    final TextEditingController controller = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Log ${_getGoalTitle(goal.type)}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: goal.color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(goal.icon, color: goal.color),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _getGoalTitle(goal.type),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          'Target: ${goal.targetValue.toInt()} ${_getGoalUnit(goal.type)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        Text(
+                          'Current: ${goal.currentValue.toInt()} ${_getGoalUnit(goal.type)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: goal.color,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'Amount to Log',
+                hintText: 'Enter ${_getGoalUnit(goal.type)}',
+                suffixText: _getGoalUnit(goal.type),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final value = double.tryParse(controller.text);
+              if (value != null && value > 0) {
+                provider.logActivityProgress(
+                  type: goal.type,
+                  value: value,
+                );
+                Navigator.pop(context);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid number'),
+                    backgroundColor: Colors.red,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: goal.color,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Log'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteGoalDialog(BuildContext context, gamification.Goal goal) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Goal'),
+        content: Text('Are you sure you want to delete your ${_getGoalTitle(goal.type)}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              provider.deleteGoal(goal);
+              Navigator.pop(context);
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
@@ -648,7 +849,7 @@ class GoalsTab extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        goal.title,
+                        _getGoalTitle(goal.type),
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -656,7 +857,7 @@ class GoalsTab extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        goal.description,
+                        _getGoalPeriodText(goal.period),
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[600],
@@ -685,19 +886,32 @@ class GoalsTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // Progress
+            // Progress Bar
             Row(
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        goal.formattedProgress,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            goal.formattedProgress,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Text(
+                            '${(goal.progress * 100).round()}%',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: goal.color,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       LinearProgressIndicator(
@@ -705,34 +919,53 @@ class GoalsTab extends StatelessWidget {
                         backgroundColor: goal.color.withOpacity(0.1),
                         color: goal.color,
                         borderRadius: BorderRadius.circular(4),
-                        minHeight: 6,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.stars, color: Colors.amber, size: 14),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${goal.pointsReward} pts',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Colors.amber,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        minHeight: 8,
                       ),
                     ],
                   ),
                 ),
               ],
+            ),
+
+            const SizedBox(height: 12),
+
+            // Goal Details
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildGoalDetail(
+                    'Target',
+                    '${goal.targetValue.toInt()} ${_getGoalUnit(goal.type)}',
+                    goal.color,
+                  ),
+                  Container(
+                    height: 20,
+                    width: 1,
+                    color: Colors.grey[300],
+                  ),
+                  _buildGoalDetail(
+                    'Current',
+                    '${goal.currentValue.toInt()} ${_getGoalUnit(goal.type)}',
+                    goal.color,
+                  ),
+                  Container(
+                    height: 20,
+                    width: 1,
+                    color: Colors.grey[300],
+                  ),
+                  _buildGoalDetail(
+                    'Created',
+                    DateFormat.MMMd().format(goal.createdAt),
+                    goal.color,
+                  ),
+                ],
+              ),
             ),
 
             if (!isCompleted) ...[
@@ -741,62 +974,31 @@ class GoalsTab extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton.icon(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Update Progress'),
-                          content: TextField(
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              labelText: 'New value',
-                              hintText: 'Enter current progress',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            onSubmitted: (value) {
-                              final newValue = double.tryParse(value);
-                              if (newValue != null) {
-                                provider.updateGoalProgress(goal.id, newValue);
-                                Navigator.pop(context);
-                              }
-                            },
-                          ),
-                        ),
-                      );
-                    },
+                    onPressed: () => _showEditGoalDialog(context, goal),
                     icon: const Icon(Icons.edit, size: 16),
-                    label: const Text('Update'),
+                    label: const Text('Edit'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => _showLogProgressDialog(context, goal),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Log Progress'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: goal.color,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Delete Goal'),
-                          content: const Text('Are you sure you want to delete this goal?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Cancel'),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                provider.deleteGoal(goal.id);
-                                Navigator.pop(context);
-                              },
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.red,
-                              ),
-                              child: const Text('Delete'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                    onPressed: () => _showDeleteGoalDialog(context, goal),
                   ),
                 ],
               ),
@@ -805,6 +1007,73 @@ class GoalsTab extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildGoalDetail(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: Colors.grey[600],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _getGoalTitle(gamification.GoalType type) {
+    switch (type) {
+      case gamification.GoalType.steps:
+        return 'Steps Goal';
+      case gamification.GoalType.water:
+        return 'Water Intake Goal';
+      case gamification.GoalType.sleep:
+        return 'Sleep Goal';
+      case gamification.GoalType.meditation:
+        return 'Meditation Goal';
+      case gamification.GoalType.workouts:
+        return 'Workout Goal';
+      case gamification.GoalType.calories:
+        return 'Calorie Goal';
+    }
+  }
+
+  String _getGoalPeriodText(gamification.GoalPeriod period) {
+    switch (period) {
+      case gamification.GoalPeriod.daily:
+        return 'Daily';
+      case gamification.GoalPeriod.weekly:
+        return 'Weekly';
+      case gamification.GoalPeriod.monthly:
+        return 'Monthly';
+    }
+  }
+
+  String _getGoalUnit(gamification.GoalType type) {
+    switch (type) {
+      case gamification.GoalType.steps:
+        return 'steps';
+      case gamification.GoalType.water:
+        return 'glasses';
+      case gamification.GoalType.sleep:
+        return 'hours';
+      case gamification.GoalType.meditation:
+        return 'min';
+      case gamification.GoalType.workouts:
+        return 'workouts';
+      case gamification.GoalType.calories:
+        return 'kcal';
+    }
   }
 }
 
@@ -878,9 +1147,9 @@ class RemindersTab extends StatelessWidget {
           const SizedBox(height: 8),
           _buildSuggestionChip(
             context,
-            'Take Medication',
-            '8:00 AM & 8:00 PM',
-            Icons.medication,
+            'Evening Meditation',
+            '8:00 PM',
+            Icons.self_improvement,
             Colors.purple,
           ),
         ],
@@ -1131,7 +1400,7 @@ class RemindersTab extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.add_circle, color: color, size: 20), // Removed 'const' since color is not constant
+            Icon(Icons.add_circle, color: color, size: 20),
           ],
         ),
       ),

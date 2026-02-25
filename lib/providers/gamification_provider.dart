@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../models/gamification_models.dart' as gamification; // Use prefix to avoid conflict
+import '../models/gamification_models.dart' as gamification;
+import '../services/goal_service.dart';
 
 class GamificationProvider extends ChangeNotifier {
   // User Stats
@@ -10,6 +11,7 @@ class GamificationProvider extends ChangeNotifier {
   List<gamification.Reminder> _reminders = [];
   
   bool _isLoading = false;
+  bool _isLoadingGoals = false;
   String? _error;
 
   // Callback for showing messages
@@ -26,6 +28,7 @@ class GamificationProvider extends ChangeNotifier {
   List<gamification.Goal> get completedGoals => _goals.where((g) => g.status == gamification.GoalStatus.completed).toList();
   List<gamification.Reminder> get reminders => _reminders;
   bool get isLoading => _isLoading;
+  bool get isLoadingGoals => _isLoadingGoals;
   String? get error => _error;
 
   // Leaderboard filters
@@ -40,6 +43,7 @@ class GamificationProvider extends ChangeNotifier {
 
   GamificationProvider() {
     _initializeMockData();
+    loadGoals(); // Load goals from backend
   }
 
   void _initializeMockData() {
@@ -214,65 +218,6 @@ class GamificationProvider extends ChangeNotifier {
       ),
     ];
 
-    // Mock goals
-    _goals = [
-      gamification.Goal(
-        id: 'g1',
-        title: 'Daily Steps',
-        description: 'Reach 10,000 steps',
-        type: gamification.GoalType.steps,
-        period: gamification.GoalPeriod.daily,
-        target: 10000,
-        current: 7843,
-        startDate: DateTime.now(),
-        pointsReward: 10,
-      ),
-      gamification.Goal(
-        id: 'g2',
-        title: 'Water Intake',
-        description: 'Drink 8 glasses of water',
-        type: gamification.GoalType.waterGlasses,
-        period: gamification.GoalPeriod.daily,
-        target: 8,
-        current: 5,
-        startDate: DateTime.now(),
-        pointsReward: 5,
-      ),
-      gamification.Goal(
-        id: 'g3',
-        title: 'Weekly Workout',
-        description: 'Complete 5 workouts this week',
-        type: gamification.GoalType.workoutMinutes,
-        period: gamification.GoalPeriod.weekly,
-        target: 5,
-        current: 3,
-        startDate: DateTime.now().subtract(const Duration(days: 3)),
-        pointsReward: 50,
-      ),
-      gamification.Goal(
-        id: 'g4',
-        title: 'Sleep Goal',
-        description: 'Get 8 hours of sleep',
-        type: gamification.GoalType.sleepHours,
-        period: gamification.GoalPeriod.daily,
-        target: 8,
-        current: 7.5,
-        startDate: DateTime.now(),
-        pointsReward: 10,
-      ),
-      gamification.Goal(
-        id: 'g5',
-        title: 'Monthly Calories',
-        description: 'Burn 15,000 calories this month',
-        type: gamification.GoalType.calories,
-        period: gamification.GoalPeriod.monthly,
-        target: 15000,
-        current: 8430,
-        startDate: DateTime.now(),
-        pointsReward: 100,
-      ),
-    ];
-
     // Mock reminders
     _reminders = [
       gamification.Reminder(
@@ -317,100 +262,215 @@ class GamificationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Goal methods - Fixed to handle immutable Goal objects
-  Future<void> addGoal(gamification.Goal goal) async {
+  // Load goals from backend
+  Future<void> loadGoals() async {
+    _isLoadingGoals = true;
+    notifyListeners();
+    
     try {
-      _goals.add(goal);
-      _showMessage('Goal created successfully');
-      notifyListeners();
+      final result = await GoalService.getGoals();
+      
+      if (result['success']) {
+        _goals = result['goals'] ?? [];
+        _error = null;
+      } else {
+        _error = result['message'];
+        _showMessage('Error loading goals: ${result['message']}', isError: true);
+      }
     } catch (e) {
       _error = e.toString();
-      _showMessage('Error creating goal: $e', isError: true);
+      _showMessage('Error loading goals: $e', isError: true);
+    } finally {
+      _isLoadingGoals = false;
       notifyListeners();
     }
   }
 
-  Future<void> updateGoalProgress(String goalId, double newValue) async {
+  // Create new goal
+  Future<void> addGoal(gamification.Goal goal) async {
+    _isLoading = true;
+    notifyListeners();
+
     try {
-      final index = _goals.indexWhere((g) => g.id == goalId);
-      if (index >= 0) {
-        final oldGoal = _goals[index];
-        
-        // Create a new Goal instance with updated values
-        final updatedGoal = gamification.Goal(
-          id: oldGoal.id,
-          title: oldGoal.title,
-          description: oldGoal.description,
-          type: oldGoal.type,
-          period: oldGoal.period,
-          target: oldGoal.target,
-          current: newValue,
-          startDate: oldGoal.startDate,
-          endDate: oldGoal.endDate,
-          status: oldGoal.status,
-          pointsReward: oldGoal.pointsReward,
-          badgeRewardId: oldGoal.badgeRewardId,
-          completedAt: oldGoal.completedAt,
-        );
-        
-        // Check if goal completed
-        gamification.GoalStatus newStatus = oldGoal.status;
-        DateTime? newCompletedAt = oldGoal.completedAt;
-        int pointsEarned = 0;
-        
-        if (newValue >= oldGoal.target && oldGoal.status == gamification.GoalStatus.active) {
-          newStatus = gamification.GoalStatus.completed;
-          newCompletedAt = DateTime.now();
-          pointsEarned = oldGoal.pointsReward;
+      final result = await GoalService.createGoal(
+        type: goal.type,
+        targetValue: goal.targetValue,
+        period: goal.period,
+      );
+
+      if (result['success']) {
+        if (result['goal'] != null) {
+          _goals.add(result['goal']);
+          _showMessage('Goal created successfully');
+          notifyListeners(); // Notify immediately
+        } else {
+          // If no goal returned, refresh to get it
+          await loadGoals();
         }
-        
-        // Update with new status if needed
-        final finalGoal = gamification.Goal(
-          id: updatedGoal.id,
-          title: updatedGoal.title,
-          description: updatedGoal.description,
-          type: updatedGoal.type,
-          period: updatedGoal.period,
-          target: updatedGoal.target,
-          current: updatedGoal.current,
-          startDate: updatedGoal.startDate,
-          endDate: updatedGoal.endDate,
-          status: newStatus,
-          pointsReward: updatedGoal.pointsReward,
-          badgeRewardId: updatedGoal.badgeRewardId,
-          completedAt: newCompletedAt,
-        );
-        
-        _goals[index] = finalGoal;
-        
-        // Update user stats with new points
-        if (pointsEarned > 0) {
+      } else {
+        _error = result['message'];
+        _showMessage('Error creating goal: ${result['message']}', isError: true);
+      }
+    } catch (e) {
+      _error = e.toString();
+      _showMessage('Error creating goal: $e', isError: true);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Update goal progress by logging activity
+  Future<void> logActivityProgress({
+    required gamification.GoalType type,
+    required double value,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      Map<String, dynamic> result;
+      
+      // Call the appropriate log method based on goal type
+      switch (type) {
+        case gamification.GoalType.steps:
+          result = await GoalService.logSteps(value.toInt());
+          break;
+        case gamification.GoalType.water:
+          result = await GoalService.logWater(value.toInt());
+          break;
+        case gamification.GoalType.sleep:
+          result = await GoalService.logSleep(value);
+          break;
+        case gamification.GoalType.meditation:
+          result = await GoalService.logMeditation(value.toInt());
+          break;
+        case gamification.GoalType.workouts:
+          result = await GoalService.logWorkouts(value.toInt());
+          break;
+        case gamification.GoalType.calories:
+          result = await GoalService.logCalories(value.toInt());
+          break;
+      }
+
+      if (result['success']) {
+        // Check if goal was completed with this log
+        if (result['completed'] == true) {
+          // Award points for completing goal (mock for now)
+          final pointsEarned = _calculatePointsForGoal(type);
           _updateUserStatsWithPoints(pointsEarned);
           _showMessage('🎉 Goal completed! +$pointsEarned points');
+        } else {
+          _showMessage(result['message'] ?? 'Progress logged successfully');
         }
         
+        // Refresh goals to get updated progress
+        await loadGoals();
+      } else {
+        _showMessage(result['message'] ?? 'Failed to log progress', isError: true);
+      }
+    } catch (e) {
+      _error = e.toString();
+      _showMessage('Error logging progress: $e', isError: true);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Delete goal
+  Future<void> deleteGoal(gamification.Goal goal) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final result = await GoalService.deleteGoal(goal.type);
+      
+      if (result['success']) {
+        _goals.removeWhere((g) => g.id == goal.id);
+        _showMessage('Goal deleted successfully');
         notifyListeners();
+      } else {
+        _showMessage('Error deleting goal: ${result['message']}', isError: true);
+      }
+    } catch (e) {
+      _error = e.toString();
+      _showMessage('Error deleting goal: $e', isError: true);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Update existing goal (delete and recreate)
+  Future<void> updateGoal(gamification.Goal oldGoal, gamification.Goal newGoal) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // First delete the old goal
+      final deleteResult = await GoalService.deleteGoal(oldGoal.type);
+      
+      if (!deleteResult['success']) {
+        _showMessage('Failed to update goal: ${deleteResult['message']}', isError: true);
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      // Then create the new goal
+      final createResult = await GoalService.createGoal(
+        type: newGoal.type,
+        targetValue: newGoal.targetValue,
+        period: newGoal.period,
+      );
+
+      if (createResult['success']) {
+        if (createResult['goal'] != null) {
+          // Replace the old goal with the new one
+          final index = _goals.indexWhere((g) => g.id == oldGoal.id);
+          if (index >= 0) {
+            _goals[index] = createResult['goal'];
+          } else {
+            _goals.add(createResult['goal']);
+          }
+          _showMessage('Goal updated successfully');
+          notifyListeners();
+        } else {
+          await loadGoals();
+        }
+      } else {
+        _showMessage('Error updating goal: ${createResult['message']}', isError: true);
       }
     } catch (e) {
       _error = e.toString();
       _showMessage('Error updating goal: $e', isError: true);
+    } finally {
+      _isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<void> deleteGoal(String goalId) async {
-    try {
-      _goals.removeWhere((g) => g.id == goalId);
-      _showMessage('Goal deleted');
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      _showMessage('Error deleting goal: $e', isError: true);
-      notifyListeners();
+  // Helper method to calculate points for completing a goal
+  int _calculatePointsForGoal(gamification.GoalType type) {
+    // Mock points calculation - you can customize this based on your gamification system
+    switch (type) {
+      case gamification.GoalType.steps:
+        return 10;
+      case gamification.GoalType.water:
+        return 8;
+      case gamification.GoalType.sleep:
+        return 12;
+      case gamification.GoalType.meditation:
+        return 15;
+      case gamification.GoalType.workouts:
+        return 20;
+      case gamification.GoalType.calories:
+        return 10;
     }
   }
 
-  // Reminder methods - Fixed to handle immutable Reminder objects
+  // Reminder methods (unchanged)
   Future<void> addReminder(gamification.Reminder reminder) async {
     try {
       _reminders.add(reminder);
@@ -455,7 +515,6 @@ class GamificationProvider extends ChangeNotifier {
       if (index >= 0) {
         final oldReminder = _reminders[index];
         
-        // Create a new Reminder with toggled isEnabled
         final updatedReminder = gamification.Reminder(
           id: oldReminder.id,
           title: oldReminder.title,
@@ -477,7 +536,7 @@ class GamificationProvider extends ChangeNotifier {
     }
   }
 
-  // Helper method to update user stats - Fixed to handle immutable UserStats
+  // Helper method to update user stats
   void _updateUserStatsWithPoints(int points) {
     if (_userStats != null) {
       final oldStats = _userStats!;
@@ -485,20 +544,21 @@ class GamificationProvider extends ChangeNotifier {
       final newTotalPoints = oldStats.totalPoints + points;
       int newLevel = oldStats.level;
       
-      // Check for level up
-      final pointsNeededForNextLevel = newLevel * 100;
-      if (newTotalPoints >= pointsNeededForNextLevel) {
+      // Check for level up (simple formula: level * 100 points needed)
+      while (newTotalPoints >= (newLevel * 100)) {
         newLevel++;
       }
       
-      // Create new UserStats instance with updated values
+      final pointsForCurrentLevel = (newLevel - 1) * 100;
+      final progress = (newTotalPoints - pointsForCurrentLevel) / 100;
+      
       _userStats = gamification.UserStats(
         currentStreak: oldStats.currentStreak,
         longestStreak: oldStats.longestStreak,
         totalPoints: newTotalPoints,
         level: newLevel,
-        pointsToNextLevel: newLevel * 100 - newTotalPoints,
-        levelProgress: newTotalPoints / (newLevel * 100),
+        pointsToNextLevel: (newLevel * 100) - newTotalPoints,
+        levelProgress: progress.clamp(0.0, 1.0),
         categoryPoints: oldStats.categoryPoints,
         badgesEarned: oldStats.badgesEarned,
         totalBadges: oldStats.totalBadges,
@@ -510,7 +570,7 @@ class GamificationProvider extends ChangeNotifier {
     }
   }
 
-  // Method to update points (called from other providers) - Fixed
+  // Method to add points (called from other providers)
   void addPoints(int points, {String? reason}) {
     _updateUserStatsWithPoints(points);
     notifyListeners();
@@ -542,5 +602,9 @@ class GamificationProvider extends ChangeNotifier {
 
   void disposeCallbacks() {
     onShowMessage = null;
+  }
+
+  void setState(void Function() fn) {
+    fn();
   }
 }

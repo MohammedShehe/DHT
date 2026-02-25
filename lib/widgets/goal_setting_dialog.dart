@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/gamification_models.dart';
+import '../services/goal_service.dart';
 
 class GoalSettingDialog extends StatefulWidget {
   final Goal? existingGoal;
+  final Function(Goal)? onGoalCreated;
 
-  const GoalSettingDialog({super.key, this.existingGoal});
+  const GoalSettingDialog({super.key, this.existingGoal, this.onGoalCreated});
 
   @override
   State<GoalSettingDialog> createState() => _GoalSettingDialogState();
@@ -13,23 +15,28 @@ class GoalSettingDialog extends StatefulWidget {
 
 class _GoalSettingDialogState extends State<GoalSettingDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _descriptionController = TextEditingController();
   final _targetController = TextEditingController();
   
   GoalType _selectedType = GoalType.steps;
   GoalPeriod _selectedPeriod = GoalPeriod.daily;
-  DateTime _startDate = DateTime.now();
-  DateTime? _endDate;
-  int _pointsReward = 10;
+  bool _isLoading = false;
 
   final Map<GoalType, String> _typeTitles = {
     GoalType.steps: 'Steps',
-    GoalType.calories: 'Calories Burned',
-    GoalType.workoutMinutes: 'Workout Minutes',
-    GoalType.waterGlasses: 'Water Glasses',
-    GoalType.sleepHours: 'Sleep Hours',
+    GoalType.water: 'Water Glasses',
+    GoalType.sleep: 'Sleep Hours',
     GoalType.meditation: 'Meditation Minutes',
+    GoalType.workouts: 'Workouts',
+    GoalType.calories: 'Calories Burned',
+  };
+
+  final Map<GoalType, String> _typeUnits = {
+    GoalType.steps: 'steps',
+    GoalType.water: 'glasses',
+    GoalType.sleep: 'hours',
+    GoalType.meditation: 'minutes',
+    GoalType.workouts: 'workouts',
+    GoalType.calories: 'kcal',
   };
 
   final Map<GoalPeriod, String> _periodTitles = {
@@ -40,20 +47,20 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
 
   final Map<GoalType, double> _suggestedTargets = {
     GoalType.steps: 10000,
-    GoalType.calories: 500,
-    GoalType.workoutMinutes: 30,
-    GoalType.waterGlasses: 8,
-    GoalType.sleepHours: 8,
+    GoalType.water: 8,
+    GoalType.sleep: 8,
     GoalType.meditation: 10,
+    GoalType.workouts: 5,
+    GoalType.calories: 500,
   };
 
-  final Map<GoalType, int> _suggestedPoints = {
-    GoalType.steps: 10,
-    GoalType.calories: 15,
-    GoalType.workoutMinutes: 20,
-    GoalType.waterGlasses: 5,
-    GoalType.sleepHours: 10,
-    GoalType.meditation: 15,
+  final Map<GoalType, GoalPeriod> _suggestedPeriods = {
+    GoalType.steps: GoalPeriod.daily,
+    GoalType.water: GoalPeriod.daily,
+    GoalType.sleep: GoalPeriod.daily,
+    GoalType.meditation: GoalPeriod.daily,
+    GoalType.workouts: GoalPeriod.weekly,
+    GoalType.calories: GoalPeriod.monthly,
   };
 
   @override
@@ -61,39 +68,134 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
     super.initState();
     if (widget.existingGoal != null) {
       _loadExistingGoal();
+    } else {
+      _updateTargetSuggestion();
     }
   }
 
   void _loadExistingGoal() {
     final goal = widget.existingGoal!;
-    _titleController.text = goal.title;
-    _descriptionController.text = goal.description;
-    _targetController.text = goal.target.toString();
+    _targetController.text = goal.targetValue.toString();
     _selectedType = goal.type;
     _selectedPeriod = goal.period;
-    _startDate = goal.startDate;
-    _endDate = goal.endDate;
-    _pointsReward = goal.pointsReward;
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _descriptionController.dispose();
-    _targetController.dispose();
-    super.dispose();
   }
 
   void _updateTargetSuggestion() {
     _targetController.text = _suggestedTargets[_selectedType]?.toString() ?? '';
-    _pointsReward = _suggestedPoints[_selectedType] ?? 10;
+    _selectedPeriod = _suggestedPeriods[_selectedType] ?? GoalPeriod.daily;
+  }
+
+  @override
+  void dispose() {
+    _targetController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveGoal() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    final targetValue = double.parse(_targetController.text);
+
+    final result = await GoalService.createGoal(
+      type: _selectedType,
+      targetValue: targetValue,
+      period: _selectedPeriod,
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result['success']) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message']),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      if (widget.onGoalCreated != null && result['goal'] != null) {
+        widget.onGoalCreated!(result['goal']);
+      }
+
+      Navigator.pop(context, result['goal']);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message']),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _updateGoal() async {
+    if (!_formKey.currentState!.validate() || widget.existingGoal == null) return;
+
+    setState(() => _isLoading = true);
+
+    final targetValue = double.parse(_targetController.text);
+
+    // For existing goals, we need to delete and recreate since the backend doesn't support updates
+    final deleteResult = await GoalService.deleteGoal(widget.existingGoal!.type);
+    
+    if (!deleteResult['success']) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update goal: ${deleteResult['message']}'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    // Create new goal with updated values
+    final createResult = await GoalService.createGoal(
+      type: _selectedType,
+      targetValue: targetValue,
+      period: _selectedPeriod,
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (createResult['success']) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Goal updated successfully'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      
+      if (widget.onGoalCreated != null && createResult['goal'] != null) {
+        widget.onGoalCreated!(createResult['goal']);
+      }
+      
+      Navigator.pop(context, createResult['goal']);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(createResult['message']),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
-      initialChildSize: 0.9,
-      maxChildSize: 0.95,
+      initialChildSize: 0.8,
+      maxChildSize: 0.9,
       minChildSize: 0.5,
       builder: (context, scrollController) {
         return Container(
@@ -107,6 +209,7 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Handle
                 Center(
                   child: Container(
                     width: 40,
@@ -118,49 +221,19 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
                   ),
                 ),
                 const SizedBox(height: 16),
+
+                // Title
                 Text(
                   widget.existingGoal == null ? 'Create New Goal' : 'Edit Goal',
                   style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 20),
 
+                // Form
                 Expanded(
                   child: ListView(
                     controller: scrollController,
                     children: [
-                      // Goal Title
-                      TextFormField(
-                        controller: _titleController,
-                        decoration: InputDecoration(
-                          labelText: 'Goal Title',
-                          prefixIcon: const Icon(Icons.title),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter a goal title';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Description
-                      TextFormField(
-                        controller: _descriptionController,
-                        maxLines: 2,
-                        decoration: InputDecoration(
-                          labelText: 'Description (Optional)',
-                          prefixIcon: const Icon(Icons.description),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
                       // Goal Type
                       DropdownButtonFormField<GoalType>(
                         value: _selectedType,
@@ -180,14 +253,16 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
                             ),
                           );
                         }).toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() {
-                              _selectedType = value;
-                              _updateTargetSuggestion();
-                            });
-                          }
-                        },
+                        onChanged: widget.existingGoal != null 
+                            ? null // Disable type change when editing
+                            : (value) {
+                                if (value != null) {
+                                  setState(() {
+                                    _selectedType = value;
+                                    _updateTargetSuggestion();
+                                  });
+                                }
+                              },
                         decoration: InputDecoration(
                           labelText: 'Goal Type',
                           prefixIcon: Icon(
@@ -232,7 +307,7 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
                         decoration: InputDecoration(
                           labelText: 'Target',
                           prefixIcon: const Icon(Icons.flag),
-                          suffixText: _getUnitForType(_selectedType),
+                          suffixText: _typeUnits[_selectedType],
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -241,144 +316,78 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
                           if (value == null || value.isEmpty) {
                             return 'Please enter a target';
                           }
-                          if (double.tryParse(value) == null) {
+                          final numValue = double.tryParse(value);
+                          if (numValue == null) {
                             return 'Please enter a valid number';
                           }
-                          if (double.parse(value) <= 0) {
+                          if (numValue <= 0) {
                             return 'Target must be greater than 0';
                           }
+                          
+                          // Additional validation based on goal type
+                          if (_selectedType == GoalType.steps && numValue > 100000) {
+                            return 'Steps target seems too high';
+                          }
+                          if (_selectedType == GoalType.water && numValue > 30) {
+                            return 'Water target seems too high';
+                          }
+                          if (_selectedType == GoalType.sleep && numValue > 24) {
+                            return 'Sleep hours cannot exceed 24';
+                          }
+                          if (_selectedType == GoalType.meditation && numValue > 480) {
+                            return 'Meditation minutes seem too high';
+                          }
+                          if (_selectedType == GoalType.workouts && numValue > 50) {
+                            return 'Workouts per week seem too high';
+                          }
+                          if (_selectedType == GoalType.calories && numValue > 10000) {
+                            return 'Calorie target seems too high';
+                          }
+                          
                           return null;
                         },
                       ),
                       const SizedBox(height: 16),
 
-                      // Quick suggestions
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey[200]!),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Quick Suggestions',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
+                      // Quick suggestions (only show for new goals)
+                      if (widget.existingGoal == null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey[200]!),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Quick Suggestions',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                _buildSuggestionChip('10,000 steps', GoalType.steps, 10000),
-                                _buildSuggestionChip('8 glasses', GoalType.waterGlasses, 8),
-                                _buildSuggestionChip('30 min workout', GoalType.workoutMinutes, 30),
-                                _buildSuggestionChip('8 hours sleep', GoalType.sleepHours, 8),
-                                _buildSuggestionChip('500 calories', GoalType.calories, 500),
-                                _buildSuggestionChip('10 min meditation', GoalType.meditation, 10),
-                              ],
-                            ),
-                          ],
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  _buildSuggestionChip('10,000 steps', GoalType.steps, 10000),
+                                  _buildSuggestionChip('8 glasses', GoalType.water, 8),
+                                  _buildSuggestionChip('8 hours sleep', GoalType.sleep, 8),
+                                  _buildSuggestionChip('10 min meditation', GoalType.meditation, 10),
+                                  _buildSuggestionChip('5 workouts/week', GoalType.workouts, 5),
+                                  _buildSuggestionChip('500 calories', GoalType.calories, 500),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 16),
+                      ],
 
-                      // Date range
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Start Date',
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                                ),
-                                const SizedBox(height: 8),
-                                GestureDetector(
-                                  onTap: () async {
-                                    final date = await showDatePicker(
-                                      context: context,
-                                      initialDate: _startDate,
-                                      firstDate: DateTime.now(),
-                                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                                    );
-                                    if (date != null) {
-                                      setState(() => _startDate = date);
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.grey[300]!),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.calendar_today, size: 18, color: Colors.grey),
-                                        const SizedBox(width: 8),
-                                        Text(DateFormat.yMMMd().format(_startDate)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'End Date (Optional)',
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                                ),
-                                const SizedBox(height: 8),
-                                GestureDetector(
-                                  onTap: () async {
-                                    final date = await showDatePicker(
-                                      context: context,
-                                      initialDate: _endDate ?? _startDate.add(const Duration(days: 30)),
-                                      firstDate: _startDate,
-                                      lastDate: _startDate.add(const Duration(days: 365)),
-                                    );
-                                    if (date != null) {
-                                      setState(() => _endDate = date);
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.grey[300]!),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.calendar_today, size: 18, color: Colors.grey),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          _endDate != null
-                                              ? DateFormat.yMMMd().format(_endDate!)
-                                              : 'No end date',
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Points reward
+                      // Info card
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -388,48 +397,18 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
                         ),
                         child: Row(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.amber,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.stars, color: Colors.white, size: 16),
-                            ),
+                            const Icon(Icons.info_outline, color: Colors.amber),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Points Reward',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  Text(
-                                    'You will earn $_pointsReward points upon completion',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.amber,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
                               child: Text(
-                                '$_pointsReward pts',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
+                                widget.existingGoal == null
+                                    ? 'You can log progress for this goal through the Activity tab. '
+                                        'Goals will automatically update when you log activities.'
+                                    : 'To update an existing goal, you need to recreate it. '
+                                        'Your progress will reset with the new target.',
+                                style: TextStyle(
                                   fontSize: 12,
+                                  color: Colors.grey[700],
                                 ),
                               ),
                             ),
@@ -441,11 +420,13 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
                 ),
 
                 const SizedBox(height: 16),
+
+                // Buttons
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: _isLoading ? null : () => Navigator.pop(context),
                         style: OutlinedButton.styleFrom(
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -458,7 +439,9 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: _saveGoal,
+                        onPressed: _isLoading 
+                            ? null 
+                            : (widget.existingGoal == null ? _saveGoal : _updateGoal),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.amber,
                           foregroundColor: Colors.white,
@@ -467,7 +450,16 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
                           ),
                           padding: const EdgeInsets.symmetric(vertical: 16),
                         ),
-                        child: const Text('Save Goal'),
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(widget.existingGoal == null ? 'Create Goal' : 'Update Goal'),
                       ),
                     ),
                   ],
@@ -486,6 +478,7 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
         setState(() {
           _selectedType = type;
           _targetController.text = target.toString();
+          _selectedPeriod = _suggestedPeriods[type] ?? GoalPeriod.daily;
         });
       },
       child: Container(
@@ -521,11 +514,11 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
         return Icons.directions_walk;
       case GoalType.calories:
         return Icons.local_fire_department;
-      case GoalType.workoutMinutes:
+      case GoalType.workouts:
         return Icons.fitness_center;
-      case GoalType.waterGlasses:
+      case GoalType.water:
         return Icons.local_drink;
-      case GoalType.sleepHours:
+      case GoalType.sleep:
         return Icons.bedtime;
       case GoalType.meditation:
         return Icons.self_improvement;
@@ -538,49 +531,14 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
         return Colors.blue;
       case GoalType.calories:
         return Colors.orange;
-      case GoalType.workoutMinutes:
+      case GoalType.workouts:
         return Colors.green;
-      case GoalType.waterGlasses:
+      case GoalType.water:
         return Colors.cyan;
-      case GoalType.sleepHours:
+      case GoalType.sleep:
         return Colors.purple;
       case GoalType.meditation:
         return Colors.indigo;
-    }
-  }
-
-  String _getUnitForType(GoalType type) {
-    switch (type) {
-      case GoalType.steps:
-        return 'steps';
-      case GoalType.calories:
-        return 'kcal';
-      case GoalType.workoutMinutes:
-        return 'min';
-      case GoalType.waterGlasses:
-        return 'glasses';
-      case GoalType.sleepHours:
-        return 'hours';
-      case GoalType.meditation:
-        return 'min';
-    }
-  }
-
-  void _saveGoal() {
-    if (_formKey.currentState!.validate()) {
-      final goal = Goal(
-        id: widget.existingGoal?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-        title: _titleController.text,
-        description: _descriptionController.text,
-        type: _selectedType,
-        period: _selectedPeriod,
-        target: double.parse(_targetController.text),
-        startDate: _startDate,
-        endDate: _endDate,
-        pointsReward: _pointsReward,
-      );
-      
-      Navigator.pop(context, goal);
     }
   }
 }
