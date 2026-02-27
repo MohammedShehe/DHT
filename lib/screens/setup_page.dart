@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'home_dashboard.dart';
 import '../services/health_service.dart';
+import '../services/auto_goal_service.dart';
 import '../models/health_profile_model.dart';
 import '../utils/snackbar_helper.dart';
 
@@ -120,6 +121,16 @@ class _SetupPageState extends State<SetupPage> {
           SnackbarHelper.showSuccess(
             context,
             'Health profile saved successfully!',
+          );
+        }
+        
+        // Set automatic goals based on health profile
+        await AutoGoalService.setRecommendedGoals(profile);
+        
+        if (mounted) {
+          SnackbarHelper.showSuccess(
+            context,
+            'Personalized goals created for you!',
           );
           
           Navigator.pushAndRemoveUntil(

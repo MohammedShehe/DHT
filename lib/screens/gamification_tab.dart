@@ -6,6 +6,7 @@ import '../providers/gamification_provider.dart';
 import '../widgets/goal_setting_dialog.dart';
 import '../widgets/reminder_dialog.dart';
 import '../models/gamification_models.dart' as gamification;
+import '../screens/goal_categories_screen.dart'; // ← ADD THIS IMPORT
 
 class GamificationTab extends StatefulWidget {
   const GamificationTab({super.key});
@@ -576,7 +577,7 @@ class BadgesTab extends StatelessWidget {
   }
 }
 
-// Goals Tab - UPDATED to work with backend
+// Goals Tab - UPDATED with Browse button
 class GoalsTab extends StatelessWidget {
   final GamificationProvider provider;
 
@@ -596,7 +597,7 @@ class GoalsTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Active Goals Section
+            // Active Goals Section with Browse and New Goal buttons
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -604,13 +605,35 @@ class GoalsTab extends StatelessWidget {
                   'Active Goals',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                 ),
-                TextButton.icon(
-                  onPressed: () => _showCreateGoalDialog(context),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('New Goal'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.amber,
-                  ),
+                Row(
+                  children: [
+                    // BROWSE BUTTON - THIS OPENS THE CATEGORIES SCREEN
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const GoalCategoriesScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.explore, size: 18),
+                      label: const Text('Browse'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.amber,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // NEW GOAL BUTTON
+                    TextButton.icon(
+                      onPressed: () => _showCreateGoalDialog(context),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('New Goal'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.amber,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -637,8 +660,9 @@ class GoalsTab extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Tap + to create your first goal!',
+                        'Tap Browse to explore goals or + to create your first goal!',
                         style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),

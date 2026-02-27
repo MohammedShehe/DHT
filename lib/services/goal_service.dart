@@ -48,11 +48,13 @@ class GoalService {
 
   // ===== GOAL MANAGEMENT =====
 
-  // Create a new goal
+  // Create a new goal (updated with tags and category)
   static Future<Map<String, dynamic>> createGoal({
     required GoalType type,
     required double targetValue,
     required GoalPeriod period,
+    List<String> tags = const [],
+    String? category,
   }) async {
     if (!await _checkNetwork()) {
       return {
@@ -117,6 +119,22 @@ class GoalService {
             currentValue: 0,
             createdAt: DateTime.now(),
             status: GoalStatus.active,
+            tags: tags,
+            category: category,
+          );
+        } else {
+          // Add tags and category to parsed goal
+          newGoal = Goal(
+            id: newGoal.id,
+            type: newGoal.type,
+            targetValue: newGoal.targetValue,
+            period: newGoal.period,
+            currentValue: newGoal.currentValue,
+            createdAt: newGoal.createdAt,
+            completedAt: newGoal.completedAt,
+            status: newGoal.status,
+            tags: tags,
+            category: category,
           );
         }
         
@@ -138,6 +156,17 @@ class GoalService {
         'message': 'Connection error: $e',
       };
     }
+  }
+
+  // Create goal from template
+  static Future<Map<String, dynamic>> createGoalFromTemplate(GoalTemplate template) async {
+    return await createGoal(
+      type: template.type,
+      targetValue: template.defaultTarget,
+      period: template.period,
+      tags: template.tags,
+      category: template.category.displayName.toLowerCase(),
+    );
   }
 
   // Get all goals
@@ -350,7 +379,7 @@ class GoalService {
     }
   }
 
-  // Delete a goal - FIXED ENDPOINTS
+  // Delete a goal
   static Future<Map<String, dynamic>> deleteGoal(GoalType type) async {
     if (!await _checkNetwork()) {
       return {
@@ -384,7 +413,7 @@ class GoalService {
           break;
       }
 
-      debugPrint('Deleting goal at endpoint: $endpoint'); // For debugging
+      debugPrint('Deleting goal at endpoint: $endpoint');
       
       final response = await http.delete(
         Uri.parse(endpoint),
@@ -421,7 +450,6 @@ class GoalService {
       
       switch (type) {
         case GoalType.steps:
-          // Check if this is a goal response or progress response
           if (data.containsKey('daily_target')) {
             return Goal(
               id: id,
@@ -431,6 +459,8 @@ class GoalService {
               currentValue: _toDouble(data['walked_today']),
               createdAt: DateTime.now(),
               status: data['completed'] == true ? GoalStatus.completed : GoalStatus.active,
+              tags: data['tags'] != null ? List<String>.from(data['tags']) : [],
+              category: data['category'],
             );
           }
           break;
@@ -445,6 +475,8 @@ class GoalService {
               currentValue: _toDouble(data['glasses_taken_today']),
               createdAt: DateTime.now(),
               status: data['completed'] == true ? GoalStatus.completed : GoalStatus.active,
+              tags: data['tags'] != null ? List<String>.from(data['tags']) : [],
+              category: data['category'],
             );
           }
           break;
@@ -459,6 +491,8 @@ class GoalService {
               currentValue: _toDouble(data['sleep_logged_today']),
               createdAt: DateTime.now(),
               status: data['completed'] == true ? GoalStatus.completed : GoalStatus.active,
+              tags: data['tags'] != null ? List<String>.from(data['tags']) : [],
+              category: data['category'],
             );
           }
           break;
@@ -473,6 +507,8 @@ class GoalService {
               currentValue: _toDouble(data['meditation_minutes_today']),
               createdAt: DateTime.now(),
               status: data['completed'] == true ? GoalStatus.completed : GoalStatus.active,
+              tags: data['tags'] != null ? List<String>.from(data['tags']) : [],
+              category: data['category'],
             );
           }
           break;
@@ -487,6 +523,8 @@ class GoalService {
               currentValue: _toDouble(data['workouts_completed_this_week']),
               createdAt: DateTime.now(),
               status: data['completed'] == true ? GoalStatus.completed : GoalStatus.active,
+              tags: data['tags'] != null ? List<String>.from(data['tags']) : [],
+              category: data['category'],
             );
           }
           break;
@@ -501,6 +539,8 @@ class GoalService {
               currentValue: _toDouble(data['calories_logged_this_month']),
               createdAt: DateTime.now(),
               status: data['completed'] == true ? GoalStatus.completed : GoalStatus.active,
+              tags: data['tags'] != null ? List<String>.from(data['tags']) : [],
+              category: data['category'],
             );
           }
           break;

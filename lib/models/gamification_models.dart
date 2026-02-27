@@ -193,7 +193,7 @@ class LeaderboardEntry {
   }
 }
 
-// UPDATED Goal Types to match backend
+// Goal Types
 enum GoalType {
   steps, water, sleep, meditation, workouts, calories
 }
@@ -201,6 +201,208 @@ enum GoalType {
 enum GoalPeriod { daily, weekly, monthly }
 
 enum GoalStatus { active, completed, expired }
+
+// Goal Categories for browsing
+enum GoalMainCategory {
+  fitness, nutrition, mindfulness, wellness, all
+}
+
+extension GoalMainCategoryExtension on GoalMainCategory {
+  String get displayName {
+    switch (this) {
+      case GoalMainCategory.fitness:
+        return 'Fitness';
+      case GoalMainCategory.nutrition:
+        return 'Nutrition';
+      case GoalMainCategory.mindfulness:
+        return 'Mindfulness';
+      case GoalMainCategory.wellness:
+        return 'Wellness';
+      case GoalMainCategory.all:
+        return 'All Goals';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case GoalMainCategory.fitness:
+        return Icons.fitness_center;
+      case GoalMainCategory.nutrition:
+        return Icons.restaurant;
+      case GoalMainCategory.mindfulness:
+        return Icons.self_improvement;
+      case GoalMainCategory.wellness:
+        return Icons.spa;
+      case GoalMainCategory.all:
+        return Icons.apps;
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case GoalMainCategory.fitness:
+        return Colors.blue;
+      case GoalMainCategory.nutrition:
+        return Colors.orange;
+      case GoalMainCategory.mindfulness:
+        return Colors.purple;
+      case GoalMainCategory.wellness:
+        return Colors.teal;
+      case GoalMainCategory.all:
+        return Colors.grey;
+    }
+  }
+}
+
+// Goal Template for browsing
+class GoalTemplate {
+  final String id;
+  final String name;
+  final String description;
+  final GoalType type;
+  final GoalPeriod period;
+  final double defaultTarget;
+  final GoalMainCategory category;
+  final List<String> tags;
+  final IconData icon;
+  final Color color;
+  final int popularity;
+  final bool isRecommended;
+
+  GoalTemplate({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.type,
+    required this.period,
+    required this.defaultTarget,
+    required this.category,
+    required this.tags,
+    required this.icon,
+    required this.color,
+    this.popularity = 50,
+    this.isRecommended = false,
+  });
+
+  factory GoalTemplate.fromType(GoalType type) {
+    switch (type) {
+      case GoalType.steps:
+        return GoalTemplate(
+          id: 'template_steps',
+          name: 'Daily Steps',
+          description: 'Walk a certain number of steps each day to stay active',
+          type: GoalType.steps,
+          period: GoalPeriod.daily,
+          defaultTarget: 10000,
+          category: GoalMainCategory.fitness,
+          tags: ['walking', 'cardio', 'fitness'],
+          icon: Icons.directions_walk,
+          color: Colors.blue,
+          popularity: 95,
+          isRecommended: true,
+        );
+      case GoalType.water:
+        return GoalTemplate(
+          id: 'template_water',
+          name: 'Water Intake',
+          description: 'Stay hydrated by drinking enough water daily',
+          type: GoalType.water,
+          period: GoalPeriod.daily,
+          defaultTarget: 8,
+          category: GoalMainCategory.wellness,
+          tags: ['hydration', 'health', 'wellness'],
+          icon: Icons.local_drink,
+          color: Colors.cyan,
+          popularity: 90,
+          isRecommended: true,
+        );
+      case GoalType.sleep:
+        return GoalTemplate(
+          id: 'template_sleep',
+          name: 'Sleep Hours',
+          description: 'Get quality sleep for better health and recovery',
+          type: GoalType.sleep,
+          period: GoalPeriod.daily,
+          defaultTarget: 8,
+          category: GoalMainCategory.wellness,
+          tags: ['rest', 'recovery', 'health'],
+          icon: Icons.bedtime,
+          color: Colors.purple,
+          popularity: 88,
+          isRecommended: true,
+        );
+      case GoalType.meditation:
+        return GoalTemplate(
+          id: 'template_meditation',
+          name: 'Meditation',
+          description: 'Practice mindfulness and reduce stress',
+          type: GoalType.meditation,
+          period: GoalPeriod.daily,
+          defaultTarget: 10,
+          category: GoalMainCategory.mindfulness,
+          tags: ['mindfulness', 'stress', 'mental'],
+          icon: Icons.self_improvement,
+          color: Colors.indigo,
+          popularity: 85,
+          isRecommended: true,
+        );
+      case GoalType.workouts:
+        return GoalTemplate(
+          id: 'template_workouts',
+          name: 'Weekly Workouts',
+          description: 'Complete workouts each week to build strength',
+          type: GoalType.workouts,
+          period: GoalPeriod.weekly,
+          defaultTarget: 5,
+          category: GoalMainCategory.fitness,
+          tags: ['exercise', 'strength', 'fitness'],
+          icon: Icons.fitness_center,
+          color: Colors.green,
+          popularity: 92,
+          isRecommended: true,
+        );
+      case GoalType.calories:
+        return GoalTemplate(
+          id: 'template_calories',
+          name: 'Monthly Calories',
+          description: 'Track calorie intake for weight management',
+          type: GoalType.calories,
+          period: GoalPeriod.monthly,
+          defaultTarget: 50000,
+          category: GoalMainCategory.nutrition,
+          tags: ['nutrition', 'weight', 'diet'],
+          icon: Icons.local_fire_department,
+          color: Colors.orange,
+          popularity: 80,
+          isRecommended: true,
+        );
+    }
+  }
+
+  static List<GoalTemplate> getAllTemplates() {
+    return GoalType.values.map((type) => GoalTemplate.fromType(type)).toList();
+  }
+
+  static List<GoalTemplate> getTemplatesByCategory(GoalMainCategory category) {
+    if (category == GoalMainCategory.all) {
+      return getAllTemplates();
+    }
+    return getAllTemplates().where((t) => t.category == category).toList();
+  }
+
+  static List<GoalTemplate> getRecommendedTemplates() {
+    return getAllTemplates().where((t) => t.isRecommended).toList();
+  }
+
+  static List<GoalTemplate> searchTemplates(String query) {
+    final lowerQuery = query.toLowerCase();
+    return getAllTemplates().where((t) {
+      return t.name.toLowerCase().contains(lowerQuery) ||
+             t.description.toLowerCase().contains(lowerQuery) ||
+             t.tags.any((tag) => tag.contains(lowerQuery));
+    }).toList();
+  }
+}
 
 class Goal {
   final String id;
@@ -211,6 +413,8 @@ class Goal {
   final DateTime createdAt;
   DateTime? completedAt;
   GoalStatus status;
+  List<String> tags;
+  String? category;
 
   Goal({
     required this.id,
@@ -221,6 +425,8 @@ class Goal {
     required this.createdAt,
     this.completedAt,
     this.status = GoalStatus.active,
+    this.tags = const [],
+    this.category,
   });
 
   double get progress {
@@ -281,6 +487,8 @@ class Goal {
     }
   }
 
+  GoalTemplate get template => GoalTemplate.fromType(type);
+
   factory Goal.fromJson(Map<String, dynamic> json) {
     return Goal(
       id: json['id'].toString(),
@@ -291,6 +499,8 @@ class Goal {
       createdAt: DateTime.parse(json['createdAt'] ?? json['created_at'] ?? DateTime.now().toIso8601String()),
       completedAt: json['completedAt'] != null ? DateTime.parse(json['completedAt']) : null,
       status: _parseGoalStatus(json['status']),
+      tags: json['tags'] != null ? List<String>.from(json['tags']) : [],
+      category: json['category'],
     );
   }
 
@@ -335,6 +545,8 @@ class Goal {
       'type': type.toString().split('.').last.toLowerCase(),
       'targetValue': targetValue,
       'period': period.toString().split('.').last.toLowerCase(),
+      'tags': tags,
+      'category': category,
     };
   }
 
@@ -344,6 +556,8 @@ class Goal {
       'targetValue': targetValue,
       'period': period.toString().split('.').last.toLowerCase(),
       'currentValue': currentValue,
+      'tags': tags,
+      'category': category,
     };
   }
 }
@@ -353,7 +567,7 @@ class Reminder {
   final String title;
   final String description;
   final TimeOfDay time;
-  final List<int> repeatDays; // 0-6, Sunday to Saturday
+  final List<int> repeatDays;
   final bool isEnabled;
   final String? action;
   final Map<String, dynamic>? actionData;

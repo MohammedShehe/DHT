@@ -5,9 +5,10 @@ import '../services/goal_service.dart';
 
 class GoalSettingDialog extends StatefulWidget {
   final Goal? existingGoal;
+  final GoalTemplate? template; 
   final Function(Goal)? onGoalCreated;
 
-  const GoalSettingDialog({super.key, this.existingGoal, this.onGoalCreated});
+  const GoalSettingDialog({super.key, this.existingGoal, this.template, this.onGoalCreated});
 
   @override
   State<GoalSettingDialog> createState() => _GoalSettingDialogState();
@@ -21,13 +22,23 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
   GoalPeriod _selectedPeriod = GoalPeriod.daily;
   bool _isLoading = false;
 
+  // Fixed periods based on backend requirements
+  static const Map<GoalType, GoalPeriod> _fixedPeriods = {
+    GoalType.steps: GoalPeriod.daily,
+    GoalType.water: GoalPeriod.daily,
+    GoalType.sleep: GoalPeriod.daily,
+    GoalType.meditation: GoalPeriod.daily,
+    GoalType.workouts: GoalPeriod.weekly,
+    GoalType.calories: GoalPeriod.monthly,
+  };
+
   final Map<GoalType, String> _typeTitles = {
     GoalType.steps: 'Steps',
     GoalType.water: 'Water Glasses',
     GoalType.sleep: 'Sleep Hours',
     GoalType.meditation: 'Meditation Minutes',
     GoalType.workouts: 'Workouts',
-    GoalType.calories: 'Calories Burned',
+    GoalType.calories: 'Calories',
   };
 
   final Map<GoalType, String> _typeUnits = {
@@ -51,16 +62,7 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
     GoalType.sleep: 8,
     GoalType.meditation: 10,
     GoalType.workouts: 5,
-    GoalType.calories: 500,
-  };
-
-  final Map<GoalType, GoalPeriod> _suggestedPeriods = {
-    GoalType.steps: GoalPeriod.daily,
-    GoalType.water: GoalPeriod.daily,
-    GoalType.sleep: GoalPeriod.daily,
-    GoalType.meditation: GoalPeriod.daily,
-    GoalType.workouts: GoalPeriod.weekly,
-    GoalType.calories: GoalPeriod.monthly,
+    GoalType.calories: 50000,
   };
 
   @override
@@ -68,21 +70,50 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
     super.initState();
     if (widget.existingGoal != null) {
       _loadExistingGoal();
+    } else if (widget.template != null) {
+      _loadFromTemplate();
     } else {
       _updateTargetSuggestion();
     }
   }
 
+  void _loadFromTemplate() {
+    final template = widget.template!;
+    setState(() {
+      _selectedType = template.type;
+      // Force fixed period based on type
+      _selectedPeriod = _getFixedPeriod(template.type);
+      _targetController.text = template.defaultTarget.toString();
+    });
+  }
+
   void _loadExistingGoal() {
     final goal = widget.existingGoal!;
-    _targetController.text = goal.targetValue.toString();
-    _selectedType = goal.type;
-    _selectedPeriod = goal.period;
+    setState(() {
+      _targetController.text = goal.targetValue.toString();
+      _selectedType = goal.type;
+      // Force fixed period based on type, ignore any saved period that doesn't match
+      _selectedPeriod = _getFixedPeriod(goal.type);
+    });
   }
 
   void _updateTargetSuggestion() {
-    _targetController.text = _suggestedTargets[_selectedType]?.toString() ?? '';
-    _selectedPeriod = _suggestedPeriods[_selectedType] ?? GoalPeriod.daily;
+    setState(() {
+      _targetController.text = _suggestedTargets[_selectedType]?.toString() ?? '';
+      // Force fixed period when type changes
+      _selectedPeriod = _getFixedPeriod(_selectedType);
+    });
+  }
+
+  // Helper method to get the fixed period for a goal type
+  GoalPeriod _getFixedPeriod(GoalType type) {
+    return _fixedPeriods[type] ?? GoalPeriod.daily;
+  }
+
+  // Check if period can be changed for this type
+  bool _isPeriodEditable(GoalType type) {
+    // All types have fixed periods in this app, so none are editable
+    return false;
   }
 
   @override
@@ -101,7 +132,7 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
     final result = await GoalService.createGoal(
       type: _selectedType,
       targetValue: targetValue,
-      period: _selectedPeriod,
+      period: _selectedPeriod, // This will always be the correct fixed period
     );
 
     if (!mounted) return;
@@ -156,11 +187,11 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
       return;
     }
 
-    // Create new goal with updated values
+    // Create new goal with updated values - use fixed period
     final createResult = await GoalService.createGoal(
       type: _selectedType,
       targetValue: targetValue,
-      period: _selectedPeriod,
+      period: _selectedPeriod, // This will always be the correct fixed period
     );
 
     if (!mounted) return;
@@ -276,26 +307,68 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Period
-                      DropdownButtonFormField<GoalPeriod>(
-                        value: _selectedPeriod,
-                        items: GoalPeriod.values.map((period) {
-                          return DropdownMenuItem(
-                            value: period,
-                            child: Text(_periodTitles[period]!),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _selectedPeriod = value);
-                          }
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'Goal Period',
-                          prefixIcon: const Icon(Icons.calendar_today),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                      // Period - DISABLED/LOCKED with explanation
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey[300]!),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.calendar_today, size: 18, color: Colors.grey),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Period',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey[700],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  _periodTitles[_selectedPeriod]!,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: _getColorForType(_selectedType).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    'Fixed',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: _getColorForType(_selectedType),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _getPeriodDescription(_selectedType),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -340,7 +413,7 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
                           if (_selectedType == GoalType.workouts && numValue > 50) {
                             return 'Workouts per week seem too high';
                           }
-                          if (_selectedType == GoalType.calories && numValue > 10000) {
+                          if (_selectedType == GoalType.calories && numValue > 100000) {
                             return 'Calorie target seems too high';
                           }
                           
@@ -378,7 +451,7 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
                                   _buildSuggestionChip('8 hours sleep', GoalType.sleep, 8),
                                   _buildSuggestionChip('10 min meditation', GoalType.meditation, 10),
                                   _buildSuggestionChip('5 workouts/week', GoalType.workouts, 5),
-                                  _buildSuggestionChip('500 calories', GoalType.calories, 500),
+                                  _buildSuggestionChip('50,000 calories', GoalType.calories, 50000),
                                 ],
                               ),
                             ],
@@ -472,13 +545,27 @@ class _GoalSettingDialogState extends State<GoalSettingDialog> {
     );
   }
 
+  String _getPeriodDescription(GoalType type) {
+    switch (type) {
+      case GoalType.steps:
+      case GoalType.water:
+      case GoalType.sleep:
+      case GoalType.meditation:
+        return 'This goal is tracked daily';
+      case GoalType.workouts:
+        return 'This goal is tracked weekly';
+      case GoalType.calories:
+        return 'This goal is tracked monthly';
+    }
+  }
+
   Widget _buildSuggestionChip(String label, GoalType type, double target) {
     return GestureDetector(
       onTap: () {
         setState(() {
           _selectedType = type;
           _targetController.text = target.toString();
-          _selectedPeriod = _suggestedPeriods[type] ?? GoalPeriod.daily;
+          _selectedPeriod = _getFixedPeriod(type);
         });
       },
       child: Container(
