@@ -7,6 +7,7 @@ import '../services/profile_service.dart';
 import '../services/account_service.dart';
 import '../services/password_setup_service.dart';
 import '../services/health_service.dart';
+import '../services/goal_service.dart';
 import '../utils/api_config.dart';
 import '../models/health_profile_model.dart';
 import 'login_page.dart';
@@ -27,6 +28,22 @@ class _ProfileTabState extends State<ProfileTab> {
   
   // Health Profile Data
   HealthProfileModel? _healthProfile;
+  
+  // Real Stats Data
+  Map<String, dynamic> _realStats = {
+    'streak': 0,
+    'points': 0,
+    'level': 1,
+    'levelName': 'Bronze',
+    'caloriesBurned': 0,
+    'steps': 0,
+    'sleepHours': 0.0,
+    'waterIntake': 0.0,
+    'workoutsThisWeek': 0,
+    'meditationMinutes': 0,
+  };
+  
+  bool _isLoadingStats = false;
   
   // Preferences
   ThemeMode _themeMode = ThemeMode.system;
@@ -57,20 +74,23 @@ class _ProfileTabState extends State<ProfileTab> {
   bool _isExportingData = false;
   bool _isLoadingHealthProfile = false;
 
-  // Health Stats
-  final Map<String, dynamic> healthStats = {
-    'streak': 0,
-    'points': 0,
-    'level': 'Bronze',
-    'caloriesBurned': 0,
-    'steps': 0,
-    'sleepHours': 0,
-    'waterIntake': 0,
-  };
-
   final List<String> languages = ['English', 'Swahili'];
   final List<String> measurementSystems = ['Metric', 'Imperial'];
   final List<String> themeOptions = ['Light', 'Dark', 'System Default'];
+
+  // Level thresholds for gamification
+  final Map<int, String> _levelNames = {
+    1: 'Bronze',
+    2: 'Bronze',
+    3: 'Bronze',
+    4: 'Silver',
+    5: 'Silver',
+    6: 'Silver',
+    7: 'Gold',
+    8: 'Gold',
+    9: 'Gold',
+    10: 'Platinum',
+  };
 
   @override
   void initState() {
@@ -78,6 +98,7 @@ class _ProfileTabState extends State<ProfileTab> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadProfileData();
       _loadHealthProfile();
+      _loadRealStats();
     });
   }
 
@@ -91,6 +112,210 @@ class _ProfileTabState extends State<ProfileTab> {
     _newEmailController.dispose();
     _emailOtpController.dispose();
     super.dispose();
+  }
+
+  // Load real stats from backend
+  Future<void> _loadRealStats() async {
+    if (!mounted) return;
+    
+    setState(() => _isLoadingStats = true);
+    
+    try {
+      final results = await Future.wait([
+        GoalService.getStepsProgress().catchError((e) => null),
+        GoalService.getWaterLogs(limit: 10).catchError((e) => null),
+        GoalService.getSleepLogs(limit: 10).catchError((e) => null),
+        GoalService.getWorkoutLogs(limit: 10).catchError((e) => null),
+        GoalService.getMeditationLogs(limit: 10).catchError((e) => null),
+        GoalService.getCalorieLogs(limit: 10).catchError((e) => null),
+      ]);
+
+      int steps = 0;
+      int caloriesBurned = 0;
+      double sleepHours = 0.0;
+      double waterGlasses = 0.0;
+      int workoutsThisWeek = 0;
+      int meditationMinutes = 0;
+
+      // Parse steps
+      if (results[0] != null && results[0]['success'] == true) {
+        final data = results[0]['data'];
+        if (data != null && data is Map) {
+          // Safely extract walked_today which could be int, double, or String
+          final walkedToday = data['walked_today'];
+          if (walkedToday != null) {
+            if (walkedToday is int) {
+              steps = walkedToday;
+            } else if (walkedToday is double) {
+              steps = walkedToday.toInt();
+            } else if (walkedToday is String) {
+              steps = int.tryParse(walkedToday) ?? 0;
+            }
+          }
+        }
+      }
+
+      // Parse water
+      if (results[1] != null && results[1]['success'] == true) {
+        final logs = results[1]['data'];
+        if (logs is List) {
+          final today = DateTime.now();
+          for (final log in logs) {
+            if (log is Map && log['log_date'] != null) {
+              try {
+                final logDate = DateTime.parse(log['log_date'].toString());
+                if (logDate.year == today.year && 
+                    logDate.month == today.month && 
+                    logDate.day == today.day) {
+                  
+                  final glasses = log['glasses'];
+                  if (glasses != null) {
+                    if (glasses is int) {
+                      waterGlasses += glasses.toDouble();
+                    } else if (glasses is double) {
+                      waterGlasses += glasses;
+                    } else if (glasses is String) {
+                      waterGlasses += double.tryParse(glasses) ?? 0.0;
+                    }
+                  }
+                }
+              } catch (e) {
+                debugPrint('Error parsing water log date: $e');
+              }
+            }
+          }
+        }
+      }
+
+      // Parse sleep
+      if (results[2] != null && results[2]['success'] == true) {
+        final logs = results[2]['data'];
+        if (logs is List) {
+          final today = DateTime.now();
+          for (final log in logs) {
+            if (log is Map && log['log_date'] != null) {
+              try {
+                final logDate = DateTime.parse(log['log_date'].toString());
+                if (logDate.year == today.year && 
+                    logDate.month == today.month && 
+                    logDate.day == today.day) {
+                  
+                  final hours = log['hours'];
+                  if (hours != null) {
+                    if (hours is int) {
+                      sleepHours += hours.toDouble();
+                    } else if (hours is double) {
+                      sleepHours += hours;
+                    } else if (hours is String) {
+                      sleepHours += double.tryParse(hours) ?? 0.0;
+                    }
+                  }
+                }
+              } catch (e) {
+                debugPrint('Error parsing sleep log date: $e');
+              }
+            }
+          }
+        }
+      }
+
+      // Parse workouts - FIXED VERSION
+      if (results[3] != null && results[3]['success'] == true) {
+        final logs = results[3]['data'];
+        if (logs is List) {
+          final now = DateTime.now();
+          final startOfWeek = DateTime(now.year, now.month, now.day)
+              .subtract(Duration(days: now.weekday - 1));
+          
+          for (final log in logs) {
+            if (log is Map && log['log_date'] != null) {
+              try {
+                final logDate = DateTime.parse(log['log_date'].toString());
+                if (logDate.isAfter(startOfWeek) || 
+                    logDate.isAtSameMomentAs(startOfWeek)) {
+                  
+                  final workoutValue = log['workouts'];
+                  if (workoutValue != null) {
+                    if (workoutValue is int) {
+                      workoutsThisWeek += workoutValue;
+                    } else if (workoutValue is double) {
+                      workoutsThisWeek += workoutValue.toInt();
+                    } else if (workoutValue is String) {
+                      workoutsThisWeek += int.tryParse(workoutValue) ?? 0;
+                    }
+                  }
+                }
+              } catch (e) {
+                debugPrint('Error parsing workout log date: $e');
+              }
+            }
+          }
+          caloriesBurned = workoutsThisWeek * 300;
+        }
+      }
+
+      // Parse meditation
+      if (results[4] != null && results[4]['success'] == true) {
+        final logs = results[4]['data'];
+        if (logs is List) {
+          final today = DateTime.now();
+          for (final log in logs) {
+            if (log is Map && log['log_date'] != null) {
+              try {
+                final logDate = DateTime.parse(log['log_date'].toString());
+                if (logDate.year == today.year && 
+                    logDate.month == today.month && 
+                    logDate.day == today.day) {
+                  
+                  final minutes = log['minutes'];
+                  if (minutes != null) {
+                    if (minutes is int) {
+                      meditationMinutes += minutes;
+                    } else if (minutes is double) {
+                      meditationMinutes += minutes.toInt();
+                    } else if (minutes is String) {
+                      meditationMinutes += int.tryParse(minutes) ?? 0;
+                    }
+                  }
+                }
+              } catch (e) {
+                debugPrint('Error parsing meditation log date: $e');
+              }
+            }
+          }
+        }
+      }
+
+      int totalPoints = (steps ~/ 100) + (workoutsThisWeek * 50) + (meditationMinutes * 5);
+      int level = (totalPoints ~/ 500) + 1;
+      if (level > 10) level = 10;
+      
+      String levelName = _levelNames[level] ?? 'Bronze';
+
+      if (mounted) {
+        setState(() {
+          _realStats = {
+            'streak': 0,
+            'points': totalPoints,
+            'level': level,
+            'levelName': levelName,
+            'caloriesBurned': caloriesBurned,
+            'steps': steps,
+            'sleepHours': sleepHours,
+            'waterIntake': waterGlasses,
+            'workoutsThisWeek': workoutsThisWeek,
+            'meditationMinutes': meditationMinutes,
+          };
+        });
+      }
+
+    } catch (e) {
+      debugPrint('Error loading real stats: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingStats = false);
+      }
+    }
   }
 
   void _showErrorDialog(String title, String message) {
@@ -296,9 +521,7 @@ class _ProfileTabState extends State<ProfileTab> {
     );
     
     if (pickedFile != null && mounted) {
-      setState(() {
-        _isUploadingImage = true;
-      });
+      setState(() => _isUploadingImage = true);
       
       try {
         final bytes = await pickedFile.readAsBytes();
@@ -1108,7 +1331,7 @@ class _ProfileTabState extends State<ProfileTab> {
                 const Icon(Icons.emoji_events, color: Colors.white, size: 16),
                 const SizedBox(width: 8),
                 Text(
-                  'Level ${healthStats['level']}',
+                  'Level ${_realStats['level']} ${_realStats['levelName']}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
@@ -1638,7 +1861,7 @@ class _ProfileTabState extends State<ProfileTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    if (_isLoading || _isLoadingStats) {
       return const Center(child: CircularProgressIndicator(color: Color(0xFF00C853)));
     }
 
@@ -1651,6 +1874,7 @@ class _ProfileTabState extends State<ProfileTab> {
             onPressed: () {
               _loadProfileData();
               _loadHealthProfile();
+              _loadRealStats();
             },
           ),
         ],
@@ -1670,10 +1894,30 @@ class _ProfileTabState extends State<ProfileTab> {
                 mainAxisSpacing: 16,
                 crossAxisSpacing: 16,
                 children: [
-                  _buildStatCard('Day Streak', '${healthStats['streak']}', Icons.local_fire_department, Colors.orange),
-                  _buildStatCard('Total Points', '${healthStats['points']}', Icons.star, Colors.amber),
-                  _buildStatCard('Calories Burned', '${healthStats['caloriesBurned']}', Icons.whatshot, Colors.red),
-                  _buildStatCard('Steps', '${healthStats['steps']}', Icons.directions_walk, Colors.blue),
+                  _buildStatCard(
+                    'Day Streak', 
+                    _realStats['streak'].toString(), 
+                    Icons.local_fire_department, 
+                    Colors.orange
+                  ),
+                  _buildStatCard(
+                    'Total Points', 
+                    _realStats['points'].toString(), 
+                    Icons.star, 
+                    Colors.amber
+                  ),
+                  _buildStatCard(
+                    'Calories Burned', 
+                    _realStats['caloriesBurned'].toString(), 
+                    Icons.whatshot, 
+                    Colors.red
+                  ),
+                  _buildStatCard(
+                    'Steps', 
+                    _realStats['steps'].toString(), 
+                    Icons.directions_walk, 
+                    Colors.blue
+                  ),
                 ],
               ),
             ),
