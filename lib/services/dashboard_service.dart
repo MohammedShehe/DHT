@@ -47,7 +47,7 @@ class DashboardService {
     }
   }
 
-  // Get complete dashboard summary with REAL data
+  // Get complete dashboard summary with REAL data including BMR
   static Future<Map<String, dynamic>> getDashboardSummary() async {
     if (!await _checkNetwork()) {
       return {
@@ -138,7 +138,6 @@ class DashboardService {
           final data = json.decode(results[4].body);
           workoutsThisWeek = _toInt(data['workouts_completed_this_week']);
           workoutsGoal = _toInt(data['weekly_target']);
-          caloriesBurned = workoutsThisWeek * 300;
         } catch (e) {
           debugPrint('Error parsing workouts: $e');
         }
@@ -154,6 +153,71 @@ class DashboardService {
           debugPrint('Error parsing calories: $e');
         }
       }
+
+      // Calculate BMR from health profile
+      int bmr = 0;
+      if (results[6] != null && results[6].statusCode == 200) {
+        try {
+          final healthData = json.decode(results[6].body);
+          
+          // Get health profile values with defaults
+          int age = _toInt(healthData['age']);
+          double weight = _toDouble(healthData['weight']); // in kg
+          double height = _toDouble(healthData['height']); // in cm
+          String gender = healthData['gender'] ?? 'Male';
+          
+          // Only calculate if we have valid data
+          if (age > 0 && weight > 0 && height > 0) {
+            // Mifflin-St Jeor Equation
+            if (gender.toLowerCase() == 'male') {
+              // BMR = 10 * weight(kg) + 6.25 * height(cm) - 5 * age(y) + 5
+              bmr = (10 * weight + 6.25 * height - 5 * age + 5).round();
+            } else {
+              // BMR = 10 * weight(kg) + 6.25 * height(cm) - 5 * age(y) - 161
+              bmr = (10 * weight + 6.25 * height - 5 * age - 161).round();
+            }
+            
+            // Apply activity factor if available
+            String activityLevel = healthData['activity_level'] ?? 'Moderate';
+            double activityFactor = 1.2; // Default sedentary
+            
+            switch (activityLevel.toLowerCase()) {
+              case 'sedentary':
+                activityFactor = 1.2;
+                break;
+              case 'lightly active':
+                activityFactor = 1.375;
+                break;
+              case 'moderate':
+                activityFactor = 1.55;
+                break;
+              case 'very active':
+                activityFactor = 1.725;
+                break;
+              case 'extremely active':
+                activityFactor = 1.9;
+                break;
+              default:
+                activityFactor = 1.55;
+            }
+            
+            // TDEE = BMR * activity factor
+            bmr = (bmr * activityFactor).round();
+            
+            debugPrint('BMR calculated: $bmr calories/day');
+          }
+        } catch (e) {
+          debugPrint('Error parsing health profile for BMR: $e');
+        }
+      }
+
+      // Calculate total calories burned:
+      // BMR (daily) + Exercise calories (workoutsThisWeek * 300 / 7 to get daily average)
+      int exerciseCaloriesPerDay = workoutsThisWeek > 0 
+          ? (workoutsThisWeek * 300) ~/ 7 
+          : 0;
+      
+      caloriesBurned = bmr + exerciseCaloriesPerDay;
 
       final summary = DashboardSummary(
         currentStreak: currentStreak,

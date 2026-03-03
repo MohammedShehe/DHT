@@ -21,8 +21,8 @@ class _IntroPageState extends State<IntroPage> {
     },
     {
       'icon': Icons.insights,
-      'title': 'AI-Powered Insights',
-      'desc': 'Get personalized recommendations and predictive analytics based on your data.',
+      'title': 'Smart Health Tracking',
+      'desc': 'Visualize your progress with interactive charts and personalized health metrics based on your daily activities.',
       'color': Color(0xFF00B0FF),
     },
     {

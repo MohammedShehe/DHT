@@ -1907,7 +1907,7 @@ class _ProfileTabState extends State<ProfileTab> {
                     Colors.amber
                   ),
                   _buildStatCard(
-                    'Calories Burned', 
+                    'Exercise', 
                     _realStats['caloriesBurned'].toString(), 
                     Icons.whatshot, 
                     Colors.red

@@ -317,9 +317,13 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             Row(
               children: [
                 Expanded(
-                  child: _buildMetricChip(
-                    summary.caloriesBurned.toString(),
-                    'Calories',
+                  child: Tooltip(
+                    message: 'Total Daily Energy Expenditure\n(BMR + Daily Activity + Exercise)',
+                    preferBelow: false,
+                    child: _buildMetricChip(
+                      summary.caloriesBurned.toString(),
+                      'TDEE',
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -333,7 +337,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 Expanded(
                   child: _buildMetricChip(
                     summary.sleepHours.toStringAsFixed(1),
-                    'Sleep',
+                    'Sleep (hrs)',
                   ),
                 ),
               ],
@@ -451,7 +455,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     final goals = summary.goalsProgress ?? {};
     
     int stepsGoal = goals['steps']?['goal'] ?? 10000;
-    double waterGoal = (goals['water']?['goal'] ?? 8).toDouble();  // ← Changed to double
+    double waterGoal = (goals['water']?['goal'] ?? 8).toDouble();
     double sleepGoal = (goals['sleep']?['goal'] ?? 8.0).toDouble();
     int meditationGoal = goals['meditation']?['goal'] ?? 10;
     int caloriesGoal = goals['calories']?['goal'] ?? 60000;
@@ -476,7 +480,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             const SizedBox(height: 12),
             _buildProgressRow(
               'Water',
-              summary.waterGlasses,  // ← Now passes double directly
+              summary.waterGlasses,
               waterGoal,
               Icons.local_drink,
               Colors.cyan,
@@ -499,10 +503,10 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             ),
             const SizedBox(height: 12),
             _buildProgressRow(
-              'Calories (Month)',
+              'Calories Consumed', 
               caloriesThisMonth.toDouble(),
               caloriesGoal.toDouble(),
-              Icons.local_fire_department,
+              Icons.restaurant, 
               Colors.orange,
             ),
           ],
