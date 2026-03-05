@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1094647124550",
+    "project_id": "digitalhealthtracker-b6043",
+    "storage_bucket": "digitalhealthtracker-b6043.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1094647124550:android:9326472b5b1599b3a57047",
+        "android_client_info": {
+          "package_name": "com.example.dht"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyATPKfCOoIb9TGki3uX_Sf55R0Y_FgDJCo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

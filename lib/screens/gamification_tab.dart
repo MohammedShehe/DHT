@@ -3,10 +3,12 @@ import 'package:provider/provider.dart';
 import 'package:percent_indicator/percent_indicator.dart';
 import 'package:intl/intl.dart';
 import '../providers/gamification_provider.dart';
+import '../providers/notification_provider.dart';
 import '../widgets/goal_setting_dialog.dart';
-import '../widgets/reminder_dialog.dart';
+import '../widgets/notification_dialog.dart';
+import '../screens/notifications_tab.dart';
 import '../models/gamification_models.dart' as gamification;
-import '../screens/goal_categories_screen.dart'; // ← ADD THIS IMPORT
+import '../screens/goal_categories_screen.dart';
 
 class GamificationTab extends StatefulWidget {
   const GamificationTab({super.key});
@@ -21,7 +23,7 @@ class _GamificationTabState extends State<GamificationTab> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     
     // Set up message callback
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -73,18 +75,19 @@ class _GamificationTabState extends State<GamificationTab> with SingleTickerProv
     });
   }
 
-  void _showCreateReminderDialog() {
+  void _showCreateNotificationDialog() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const ReminderDialog(),
-    ).then((reminder) {
-      if (reminder != null) {
-        final provider = Provider.of<GamificationProvider>(context, listen: false);
-        provider.addReminder(reminder);
-      }
-    });
+      builder: (context) => NotificationDialog(
+        onNotificationCreated: (preference) {
+          // Refresh notifications list
+          final provider = Provider.of<NotificationProvider>(context, listen: false);
+          provider.loadPreferences();
+        },
+      ),
+    );
   }
 
   void _refreshLeaderboard() {
@@ -112,17 +115,19 @@ class _GamificationTabState extends State<GamificationTab> with SingleTickerProv
           indicatorColor: Colors.amber,
           labelColor: Colors.amber,
           unselectedLabelColor: Colors.grey,
+          isScrollable: true,
           tabs: const [
             Tab(icon: Icon(Icons.emoji_events), text: 'Badges'),
             Tab(icon: Icon(Icons.flag), text: 'Goals'),
             Tab(icon: Icon(Icons.alarm), text: 'Reminders'),
+            Tab(icon: Icon(Icons.notifications), text: 'Notifications'),
             Tab(icon: Icon(Icons.leaderboard), text: 'Leaderboard'),
           ],
         ),
       ),
-      body: Consumer<GamificationProvider>(
-        builder: (context, provider, child) {
-          if (provider.isLoading) {
+      body: Consumer2<GamificationProvider, NotificationProvider>(
+        builder: (context, gamificationProvider, notificationProvider, child) {
+          if (gamificationProvider.isLoading) {
             return const Center(
               child: CircularProgressIndicator(color: Colors.amber),
             );
@@ -131,10 +136,11 @@ class _GamificationTabState extends State<GamificationTab> with SingleTickerProv
           return TabBarView(
             controller: _tabController,
             children: [
-              BadgesTab(provider: provider),
-              GoalsTab(provider: provider),
-              RemindersTab(provider: provider),
-              LeaderboardTab(provider: provider),
+              BadgesTab(provider: gamificationProvider),
+              GoalsTab(provider: gamificationProvider),
+              RemindersTab(provider: gamificationProvider),
+              const NotificationsTab(),
+              LeaderboardTab(provider: gamificationProvider),
             ],
           );
         },
@@ -144,20 +150,23 @@ class _GamificationTabState extends State<GamificationTab> with SingleTickerProv
           if (_tabController.index == 1) {
             _showCreateGoalDialog();
           } else if (_tabController.index == 2) {
-            _showCreateReminderDialog();
-          } else if (_tabController.index == 0) {
-            // Scroll to top of badges tab
-            // You can implement this if needed
+            // Use the new notification dialog for reminders
+            _showCreateNotificationDialog();
           } else if (_tabController.index == 3) {
+            _showCreateNotificationDialog();
+          } else if (_tabController.index == 4) {
             _refreshLeaderboard();
+          } else if (_tabController.index == 0) {
+            // Scroll to top of badges tab (optional)
           }
         },
         backgroundColor: Colors.amber,
         child: Icon(
           _tabController.index == 1 ? Icons.add :
-          _tabController.index == 2 ? Icons.alarm_add :
-          _tabController.index == 0 ? Icons.military_tech :
-          Icons.refresh,
+          _tabController.index == 2 ? Icons.notifications_active :
+          _tabController.index == 3 ? Icons.add_alert :
+          _tabController.index == 4 ? Icons.refresh :
+          Icons.military_tech,
           color: Colors.white,
         ),
       ),
@@ -577,7 +586,7 @@ class BadgesTab extends StatelessWidget {
   }
 }
 
-// Goals Tab - UPDATED with Browse button
+// Goals Tab
 class GoalsTab extends StatelessWidget {
   final GamificationProvider provider;
 
@@ -607,7 +616,7 @@ class GoalsTab extends StatelessWidget {
                 ),
                 Row(
                   children: [
-                    // BROWSE BUTTON - THIS OPENS THE CATEGORIES SCREEN
+                    // BROWSE BUTTON
                     TextButton.icon(
                       onPressed: () {
                         Navigator.push(
@@ -1101,7 +1110,7 @@ class GoalsTab extends StatelessWidget {
   }
 }
 
-// Reminders Tab
+// Reminders Tab (Updated to use the new notification system)
 class RemindersTab extends StatelessWidget {
   final GamificationProvider provider;
 
@@ -1109,6 +1118,10 @@ class RemindersTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get the notification provider
+    final notificationProvider = Provider.of<NotificationProvider>(context);
+    final reminders = notificationProvider.preferences;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -1120,7 +1133,7 @@ class RemindersTab extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          if (provider.reminders.isEmpty)
+          if (reminders.isEmpty)
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
@@ -1142,7 +1155,7 @@ class RemindersTab extends StatelessWidget {
               ),
             )
           else
-            ...provider.reminders.map((reminder) => _buildReminderCard(context, reminder)),
+            ...reminders.map((reminder) => _buildReminderCard(context, reminder, notificationProvider)),
 
           const SizedBox(height: 16),
 
@@ -1176,12 +1189,37 @@ class RemindersTab extends StatelessWidget {
             Icons.self_improvement,
             Colors.purple,
           ),
+
+          const SizedBox(height: 16),
+
+          // Reset to defaults button
+          Center(
+            child: TextButton.icon(
+              onPressed: () {
+                _showResetConfirmation(context, notificationProvider);
+              },
+              icon: const Icon(Icons.restore, color: Colors.amber),
+              label: const Text('Reset to Default Reminders'),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.amber,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildReminderCard(BuildContext context, gamification.Reminder reminder) {
+  Widget _buildReminderCard(BuildContext context, dynamic reminder, NotificationProvider provider) {
+    // Check if it's a NotificationPreference or old Reminder model
+    final bool isEnabled = reminder.isEnabled ?? true;
+    final Color actionColor = reminder.actionColor ?? Colors.blue;
+    final String title = reminder.title ?? '';
+    final String message = reminder.message ?? reminder.description ?? '';
+    final String formattedTime = reminder.time != null 
+        ? '${reminder.time.hour.toString().padLeft(2, '0')}:${reminder.time.minute.toString().padLeft(2, '0')}'
+        : reminder.formattedTime ?? '';
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
@@ -1198,12 +1236,12 @@ class RemindersTab extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: reminder.isEnabled ? Colors.blue.withOpacity(0.1) : Colors.grey[100],
+                    color: isEnabled ? actionColor.withOpacity(0.1) : Colors.grey[100],
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
-                    Icons.alarm,
-                    color: reminder.isEnabled ? Colors.blue : Colors.grey,
+                    reminder.actionIcon ?? Icons.alarm,
+                    color: isEnabled ? actionColor : Colors.grey,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1212,105 +1250,114 @@ class RemindersTab extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        reminder.title,
+                        title,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: reminder.isEnabled ? Colors.black : Colors.grey,
+                          color: isEnabled ? Colors.black : Colors.grey,
                         ),
                       ),
                       Text(
-                        reminder.description,
+                        message,
                         style: TextStyle(
                           fontSize: 12,
-                          color: reminder.isEnabled ? Colors.grey[600] : Colors.grey[400],
+                          color: isEnabled ? Colors.grey[600] : Colors.grey[400],
                         ),
                       ),
                     ],
                   ),
                 ),
                 Switch(
-                  value: reminder.isEnabled,
-                  onChanged: (value) => provider.toggleReminder(reminder.id),
-                  activeColor: Colors.blue,
+                  value: isEnabled,
+                  onChanged: (value) {
+                    if (reminder.id != null) {
+                      provider.togglePreference(reminder.id!, value);
+                    }
+                  },
+                  activeColor: actionColor,
                 ),
               ],
             ),
             const SizedBox(height: 12),
 
             // Time and days
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: reminder.isEnabled ? Colors.blue.withOpacity(0.1) : Colors.grey[100],
+                    color: isEnabled ? actionColor.withOpacity(0.1) : Colors.grey[100],
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.access_time, size: 14, color: Colors.blue),
+                      Icon(Icons.access_time, size: 14, color: isEnabled ? actionColor : Colors.grey),
                       const SizedBox(width: 4),
                       Text(
-                        reminder.formattedTime,
+                        formattedTime,
                         style: TextStyle(
                           fontSize: 12,
-                          color: reminder.isEnabled ? Colors.blue : Colors.grey,
+                          color: isEnabled ? actionColor : Colors.grey,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Wrap(
-                    spacing: 4,
-                    runSpacing: 4,
-                    children: reminder.formattedDays.map((day) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: reminder.isEnabled ? Colors.grey[200] : Colors.grey[100],
-                          borderRadius: BorderRadius.circular(12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isEnabled ? actionColor.withOpacity(0.1) : Colors.grey[100],
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.repeat, size: 14, color: isEnabled ? actionColor : Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(
+                        reminder.formattedDays ?? 'Every day',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isEnabled ? actionColor : Colors.grey,
+                          fontWeight: FontWeight.w500,
                         ),
-                        child: Text(
-                          day,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: reminder.isEnabled ? Colors.grey[700] : Colors.grey[400],
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                      ),
+                    ],
                   ),
                 ),
+                if (reminder.actionType != null && reminder.actionType!.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isEnabled ? actionColor.withOpacity(0.1) : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.link, size: 14, color: isEnabled ? actionColor : Colors.grey),
+                        const SizedBox(width: 4),
+                        Text(
+                          _getActionLabel(reminder.actionType!),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isEnabled ? actionColor : Colors.grey,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
 
-            if (reminder.action != null) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: reminder.isEnabled ? Colors.grey[50] : Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey[200]!),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.link, size: 14, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Opens: ${_getActionLabel(reminder.action!)}',
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            const SizedBox(height: 12),
 
-            const SizedBox(height: 8),
+            // Action buttons
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -1320,42 +1367,24 @@ class RemindersTab extends StatelessWidget {
                       context: context,
                       isScrollControlled: true,
                       backgroundColor: Colors.transparent,
-                      builder: (context) => ReminderDialog(existingReminder: reminder),
-                    ).then((updated) {
-                      if (updated != null) {
-                        provider.updateReminder(updated);
-                      }
-                    });
+                      builder: (context) => NotificationDialog(
+                        existingPreference: reminder,
+                        onNotificationCreated: (updated) {
+                          provider.loadPreferences();
+                        },
+                      ),
+                    );
                   },
                   icon: const Icon(Icons.edit, size: 16),
                   label: const Text('Edit'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: actionColor,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 TextButton.icon(
                   onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Delete Reminder'),
-                        content: const Text('Are you sure you want to delete this reminder?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              provider.deleteReminder(reminder.id);
-                              Navigator.pop(context);
-                            },
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.red,
-                            ),
-                            child: const Text('Delete'),
-                          ),
-                        ],
-                      ),
-                    );
+                    _showDeleteConfirmation(context, reminder, provider);
                   },
                   icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
                   label: const Text('Delete', style: TextStyle(color: Colors.red)),
@@ -1381,7 +1410,7 @@ class RemindersTab extends StatelessWidget {
           context: context,
           isScrollControlled: true,
           backgroundColor: Colors.transparent,
-          builder: (context) => const ReminderDialog(),
+          builder: (context) => const NotificationDialog(),
         );
       },
       child: Container(
@@ -1431,20 +1460,64 @@ class RemindersTab extends StatelessWidget {
     );
   }
 
-  String _getActionLabel(String action) {
-    switch (action) {
-      case 'open_activity':
-        return 'Activity Logging';
-      case 'open_hydration':
-        return 'Hydration Logging';
-      case 'open_meal':
-        return 'Meal Logging';
-      case 'open_medication':
-        return 'Medication Reminder';
-      case 'open_meditation':
-        return 'Meditation';
-      default:
-        return action;
+  void _showDeleteConfirmation(BuildContext context, dynamic reminder, NotificationProvider provider) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Reminder'),
+        content: const Text('Are you sure you want to delete this reminder?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (reminder.id != null) {
+                provider.deletePreference(reminder.id!);
+              }
+              Navigator.pop(context);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showResetConfirmation(BuildContext context, NotificationProvider provider) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset to Defaults'),
+        content: const Text('This will reset all reminders to default settings. Custom reminders will be deleted.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              provider.resetToDefaults();
+              Navigator.pop(context);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.amber),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getActionLabel(String actionType) {
+    switch (actionType) {
+      case 'open_activity': return 'Activity';
+      case 'log_water': return 'Water';
+      case 'log_meal': return 'Meal';
+      case 'take_medication': return 'Medication';
+      case 'meditate': return 'Meditate';
+      default: return actionType;
     }
   }
 }

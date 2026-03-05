@@ -1,56 +1,66 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../models/gamification_models.dart';
+import '../models/notification_models.dart';
+import '../services/notification_service.dart';
 
-class ReminderDialog extends StatefulWidget {
-  final Reminder? existingReminder;
+class NotificationDialog extends StatefulWidget {
+  final NotificationPreference? existingPreference;
+  final Function(NotificationPreference)? onNotificationCreated;
 
-  const ReminderDialog({super.key, this.existingReminder});
+  const NotificationDialog({
+    super.key, 
+    this.existingPreference,
+    this.onNotificationCreated,
+  });
 
   @override
-  State<ReminderDialog> createState() => _ReminderDialogState();
+  State<NotificationDialog> createState() => _NotificationDialogState();
 }
 
-class _ReminderDialogState extends State<ReminderDialog> {
+class _NotificationDialogState extends State<NotificationDialog> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
-  final _descriptionController = TextEditingController();
+  final _messageController = TextEditingController();
   
   TimeOfDay _selectedTime = TimeOfDay.now();
   List<int> _selectedDays = [1, 2, 3, 4, 5]; // Weekdays by default
-  String _selectedAction = ''; // Changed from String? to String with default empty string
+  String _selectedAction = ''; // Empty for no action
+  bool _isEnabled = true;
 
   final List<Map<String, dynamic>> _availableActions = [
+    {'value': '', 'label': 'No Action', 'icon': Icons.notifications_none},
     {'value': 'open_activity', 'label': 'Open Activity', 'icon': Icons.fitness_center},
-    {'value': 'open_hydration', 'label': 'Log Water', 'icon': Icons.local_drink},
-    {'value': 'open_meal', 'label': 'Log Meal', 'icon': Icons.restaurant},
-    {'value': 'open_medication', 'label': 'Take Medication', 'icon': Icons.medication},
-    {'value': 'open_meditation', 'label': 'Meditate', 'icon': Icons.self_improvement},
+    {'value': 'log_water', 'label': 'Log Water', 'icon': Icons.local_drink},
+    {'value': 'log_meal', 'label': 'Log Meal', 'icon': Icons.restaurant},
+    {'value': 'take_medication', 'label': 'Take Medication', 'icon': Icons.medication},
+    {'value': 'meditate', 'label': 'Meditate', 'icon': Icons.self_improvement},
   ];
 
   final List<String> _dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  final Map<int, String> _dayAbbr = {0: 'S', 1: 'M', 2: 'T', 3: 'W', 4: 'T', 5: 'F', 6: 'S'};
 
   @override
   void initState() {
     super.initState();
-    if (widget.existingReminder != null) {
-      _loadExistingReminder();
+    if (widget.existingPreference != null) {
+      _loadExistingPreference();
     }
   }
 
-  void _loadExistingReminder() {
-    final reminder = widget.existingReminder!;
-    _titleController.text = reminder.title;
-    _descriptionController.text = reminder.description;
-    _selectedTime = reminder.time;
-    _selectedDays = List.from(reminder.repeatDays);
-    _selectedAction = reminder.action ?? ''; // Handle null action
+  void _loadExistingPreference() {
+    final pref = widget.existingPreference!;
+    _titleController.text = pref.title;
+    _messageController.text = pref.message;
+    _selectedTime = pref.time;
+    _selectedDays = pref.dayIndices;
+    _selectedAction = pref.actionType ?? '';
+    _isEnabled = pref.isEnabled;
   }
 
   @override
   void dispose() {
     _titleController.dispose();
-    _descriptionController.dispose();
+    _messageController.dispose();
     super.dispose();
   }
 
@@ -83,6 +93,82 @@ class _ReminderDialogState extends State<ReminderDialog> {
     });
   }
 
+  // Helper method to check if list contains all items (replaces extension)
+  bool _containsAll(List<int> list, List<int> items) {
+    for (var item in items) {
+      if (!list.contains(item)) return false;
+    }
+    return true;
+  }
+
+  String _getRepeatDaysString() {
+    if (_selectedDays.length == 7) return 'all';
+    if (_selectedDays.length == 5 && _containsAll(_selectedDays, [1, 2, 3, 4, 5])) {
+      return 'weekdays';
+    }
+    if (_selectedDays.length == 2 && _containsAll(_selectedDays, [0, 6])) {
+      return 'weekends';
+    }
+    
+    const dayMap = {0: 'sun', 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri', 6: 'sat'};
+    return _selectedDays.map((d) => dayMap[d]!).join(',');
+  }
+
+  void _saveNotification() async {
+    if (!_formKey.currentState!.validate()) return;
+    
+    if (_selectedDays.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select at least one day'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    // Create notification preference
+    final preference = NotificationPreference(
+      id: widget.existingPreference?.id,
+      title: _titleController.text.trim(),
+      message: _messageController.text.trim(),
+      time: _selectedTime,
+      repeatDays: _getRepeatDaysString(),
+      actionType: _selectedAction.isEmpty ? null : _selectedAction,
+      isEnabled: _isEnabled,
+    );
+
+    // Save via service
+    final result = await NotificationService.savePreference(preference);
+    
+    if (!mounted) return;
+
+    if (result['success']) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] ?? 'Notification saved successfully'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      if (widget.onNotificationCreated != null && result['preference'] != null) {
+        widget.onNotificationCreated!(result['preference']);
+      }
+
+      Navigator.pop(context, result['preference'] ?? preference);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] ?? 'Failed to save notification'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
@@ -101,6 +187,7 @@ class _ReminderDialogState extends State<ReminderDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Handle
                 Center(
                   child: Container(
                     width: 40,
@@ -112,21 +199,24 @@ class _ReminderDialogState extends State<ReminderDialog> {
                   ),
                 ),
                 const SizedBox(height: 16),
+
+                // Title
                 Text(
-                  widget.existingReminder == null ? 'Set Reminder' : 'Edit Reminder',
+                  widget.existingPreference == null ? 'Create Reminder' : 'Edit Reminder',
                   style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 20),
 
+                // Form
                 Expanded(
                   child: ListView(
                     controller: scrollController,
                     children: [
-                      // Title
+                      // Title Field
                       TextFormField(
                         controller: _titleController,
                         decoration: InputDecoration(
-                          labelText: 'Reminder Title',
+                          labelText: 'Title *',
                           prefixIcon: const Icon(Icons.title),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -141,24 +231,30 @@ class _ReminderDialogState extends State<ReminderDialog> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Description
+                      // Message Field
                       TextFormField(
-                        controller: _descriptionController,
-                        maxLines: 2,
+                        controller: _messageController,
+                        maxLines: 3,
                         decoration: InputDecoration(
-                          labelText: 'Description (Optional)',
-                          prefixIcon: const Icon(Icons.description),
+                          labelText: 'Message *',
+                          prefixIcon: const Icon(Icons.message),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter a message';
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 16),
 
-                      // Time
+                      // Time Picker
                       ListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Time'),
+                        title: const Text('Time *'),
                         subtitle: Text(
                           _selectedTime.format(context),
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
@@ -184,12 +280,12 @@ class _ReminderDialogState extends State<ReminderDialog> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Repeat days
+                      // Repeat Days Section
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Repeat',
+                            'Repeat *',
                             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                           ),
                           const SizedBox(height: 8),
@@ -225,7 +321,7 @@ class _ReminderDialogState extends State<ReminderDialog> {
                                   onPressed: _selectWeekdays,
                                   style: TextButton.styleFrom(
                                     backgroundColor: _selectedDays.length == 5 &&
-                                        _selectedDays.containsAll([1, 2, 3, 4, 5])
+                                        _containsAll(_selectedDays, [1, 2, 3, 4, 5])
                                         ? Colors.blue.withOpacity(0.2)
                                         : Colors.grey[100],
                                     shape: RoundedRectangleBorder(
@@ -236,7 +332,7 @@ class _ReminderDialogState extends State<ReminderDialog> {
                                     'Weekdays',
                                     style: TextStyle(
                                       color: _selectedDays.length == 5 &&
-                                          _selectedDays.containsAll([1, 2, 3, 4, 5])
+                                          _containsAll(_selectedDays, [1, 2, 3, 4, 5])
                                           ? Colors.blue
                                           : Colors.grey[600],
                                       fontSize: 12,
@@ -250,7 +346,7 @@ class _ReminderDialogState extends State<ReminderDialog> {
                                   onPressed: _selectWeekends,
                                   style: TextButton.styleFrom(
                                     backgroundColor: _selectedDays.length == 2 &&
-                                        _selectedDays.containsAll([0, 6])
+                                        _containsAll(_selectedDays, [0, 6])
                                         ? Colors.blue.withOpacity(0.2)
                                         : Colors.grey[100],
                                     shape: RoundedRectangleBorder(
@@ -261,7 +357,7 @@ class _ReminderDialogState extends State<ReminderDialog> {
                                     'Weekends',
                                     style: TextStyle(
                                       color: _selectedDays.length == 2 &&
-                                          _selectedDays.containsAll([0, 6])
+                                          _containsAll(_selectedDays, [0, 6])
                                           ? Colors.blue
                                           : Colors.grey[600],
                                       fontSize: 12,
@@ -295,12 +391,13 @@ class _ReminderDialogState extends State<ReminderDialog> {
                                   ),
                                   child: Center(
                                     child: Text(
-                                      _dayNames[index],
+                                      _dayAbbr[index]!,
                                       style: TextStyle(
                                         color: isSelected
                                             ? Colors.white
                                             : Colors.grey[600],
                                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                        fontSize: 16,
                                       ),
                                     ),
                                   ),
@@ -312,7 +409,7 @@ class _ReminderDialogState extends State<ReminderDialog> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Action (optional)
+                      // Action Selection
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -327,45 +424,89 @@ class _ReminderDialogState extends State<ReminderDialog> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Column(
-                              children: [
-                                RadioListTile<String>(
-                                  title: const Text('No action'),
-                                  value: '', // Empty string for no action
+                              children: _availableActions.map((action) {
+                                return RadioListTile<String>(
+                                  title: Row(
+                                    children: [
+                                      Icon(action['icon'], size: 18, color: Colors.blue),
+                                      const SizedBox(width: 8),
+                                      Text(action['label']),
+                                    ],
+                                  ),
+                                  value: action['value'],
                                   groupValue: _selectedAction,
                                   onChanged: (value) {
                                     setState(() => _selectedAction = value ?? '');
                                   },
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                                   dense: true,
-                                ),
-                                ..._availableActions.map((action) {
-                                  return RadioListTile<String>(
-                                    title: Row(
-                                      children: [
-                                        Icon(action['icon'], size: 18, color: Colors.blue),
-                                        const SizedBox(width: 8),
-                                        Text(action['label']),
-                                      ],
-                                    ),
-                                    value: action['value'],
-                                    groupValue: _selectedAction,
-                                    onChanged: (value) {
-                                      setState(() => _selectedAction = value ?? '');
-                                    },
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                                    dense: true,
-                                  );
-                                }).toList(),
-                              ],
+                                );
+                              }).toList(),
                             ),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 16),
+
+                      // Enabled Switch
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey[200]!),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Enable Notification',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                            ),
+                            Switch(
+                              value: _isEnabled,
+                              onChanged: (value) => setState(() => _isEnabled = value),
+                              activeColor: Colors.blue,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Reset Info (for predefined notifications)
+                      if (widget.existingPreference?.isPredefined == true) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.info_outline, color: Colors.amber),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'This is a predefined notification. You can edit or disable it.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[700],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                     ],
                   ),
                 ),
 
                 const SizedBox(height: 16),
+
+                // Buttons
                 Row(
                   children: [
                     Expanded(
@@ -383,7 +524,7 @@ class _ReminderDialogState extends State<ReminderDialog> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: _saveReminder,
+                        onPressed: _saveNotification,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.blue,
                           foregroundColor: Colors.white,
@@ -404,39 +545,5 @@ class _ReminderDialogState extends State<ReminderDialog> {
       },
     );
   }
-
-  void _saveReminder() {
-    if (_formKey.currentState!.validate()) {
-      if (_selectedDays.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please select at least one day'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
-      final reminder = Reminder(
-        id: widget.existingReminder?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-        title: _titleController.text,
-        description: _descriptionController.text,
-        time: _selectedTime,
-        repeatDays: _selectedDays,
-        isEnabled: widget.existingReminder?.isEnabled ?? true,
-        action: _selectedAction.isEmpty ? null : _selectedAction, // Convert empty string to null
-      );
-      
-      Navigator.pop(context, reminder);
-    }
-  }
 }
 
-extension ListContainsAll on List<int> {
-  bool containsAll(List<int> items) {
-    for (var item in items) {
-      if (!contains(item)) return false;
-    }
-    return true;
-  }
-}
