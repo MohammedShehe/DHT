@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../models/notification_models.dart';
 import '../services/notification_service.dart';
 
@@ -22,10 +23,19 @@ class NotificationProvider extends ChangeNotifier {
   Function(String message, {bool isError})? onShowMessage;
 
   NotificationProvider() {
-    loadPreferences();
-    loadTokens();
-    loadHistory();
+    _initialize();
   }
+
+  // Initialize provider
+  Future<void> _initialize() async {
+    await Future.wait([
+      loadPreferences(),
+      loadTokens(),
+      loadHistory(),
+    ]);
+  }
+
+  // ===== NOTIFICATION PREFERENCES =====
 
   // Load all notification preferences
   Future<void> loadPreferences() async {
@@ -185,13 +195,51 @@ class NotificationProvider extends ChangeNotifier {
     }
   }
 
-  // Register FCM token
+  // ===== FCM TOKEN MANAGEMENT =====
+
+  // Register device token after login
+  Future<void> registerDeviceTokenAfterLogin() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      final token = await messaging.getToken();
+      
+      if (token == null) {
+        debugPrint('❌ Failed to get FCM token');
+        return;
+      }
+      
+      debugPrint('📱 Registering token with backend: $token');
+      
+      // Get device info
+      String deviceType = _getDeviceType();
+      String deviceName = _getDeviceName();
+      
+      final result = await NotificationService.registerToken(
+        fcmToken: token,
+        deviceType: deviceType,
+        deviceName: deviceName,
+      );
+      
+      if (result['success']) {
+        debugPrint('✅ Token registered with backend');
+        await loadTokens();
+      } else {
+        debugPrint('❌ Backend registration failed: ${result['message']}');
+        _showMessage('Failed to register device: ${result['message']}', isError: true);
+      }
+    } catch (e) {
+      debugPrint('❌ Token registration error: $e');
+      _showMessage('Error registering device: $e', isError: true);
+    }
+  }
+
+  // Register FCM token (manual)
   Future<void> registerToken(String fcmToken, {String? deviceType, String? deviceName}) async {
     try {
       final result = await NotificationService.registerToken(
         fcmToken: fcmToken,
-        deviceType: deviceType,
-        deviceName: deviceName,
+        deviceType: deviceType ?? _getDeviceType(),
+        deviceName: deviceName ?? _getDeviceName(),
       );
       
       if (result['success']) {
@@ -236,6 +284,8 @@ class NotificationProvider extends ChangeNotifier {
     }
   }
 
+  // ===== NOTIFICATION HISTORY =====
+
   // Load notification history
   Future<void> loadHistory({int page = 1, int limit = 20}) async {
     try {
@@ -249,6 +299,8 @@ class NotificationProvider extends ChangeNotifier {
       debugPrint('Error loading history: $e');
     }
   }
+
+  // ===== HELPER METHODS =====
 
   // Get notification by ID
   NotificationPreference? getPreferenceById(int id) {
@@ -287,8 +339,36 @@ class NotificationProvider extends ChangeNotifier {
     }
   }
 
+  // Get device type
+  String _getDeviceType() {
+    // This is a simplified version
+    // For production, use device_info_plus package
+    if (ThemeData.fallback().platform == TargetPlatform.iOS) {
+      return 'ios';
+    } else if (ThemeData.fallback().platform == TargetPlatform.android) {
+      return 'android';
+    }
+    return 'unknown';
+  }
+
+  // Get device name
+  String _getDeviceName() {
+    // This is a simplified version
+    // For production, use device_info_plus package
+    return 'Flutter Device';
+  }
+
   // Clean up
   void disposeCallbacks() {
     onShowMessage = null;
+  }
+
+  // Refresh all data
+  Future<void> refreshAll() async {
+    await Future.wait([
+      loadPreferences(),
+      loadTokens(),
+      loadHistory(),
+    ]);
   }
 }

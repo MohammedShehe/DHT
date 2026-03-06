@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:provider/provider.dart';
 import 'login_page.dart';
 import 'permission_page.dart';
 import 'home_dashboard.dart';
 import '../services/auth_service.dart';
 import '../services/password_setup_service.dart';
+import '../providers/notification_provider.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -73,6 +75,20 @@ class _RegisterPageState extends State<RegisterPage> {
     return null;
   }
 
+  // Register device token after successful registration
+  Future<void> _registerDeviceToken() async {
+    try {
+      final notificationProvider = Provider.of<NotificationProvider>(
+        context, 
+        listen: false
+      );
+      await notificationProvider.registerDeviceTokenAfterLogin();
+    } catch (e) {
+      debugPrint('Failed to register device token: $e');
+      // Don't block navigation if token registration fails
+    }
+  }
+
   void _register() async {
     if (_formKey.currentState!.validate() && _termsAccepted) {
       setState(() => _isLoading = true);
@@ -89,9 +105,12 @@ class _RegisterPageState extends State<RegisterPage> {
           setState(() => _isLoading = false);
           
           if (result['success'] == true) {
-            // ✅ Store the token returned from registration
+            // Store the token returned from registration
             if (result['token'] != null) {
               await AuthService.storeToken(result['token']);
+              
+              // Register device token
+              await _registerDeviceToken();
               
               // Show success message
               ScaffoldMessenger.of(context).showSnackBar(
@@ -152,12 +171,11 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  // ✅ UPDATED: Google Sign-In with NEW flow for registration
+  // Google Sign-In with flow for registration
   void _signInWithGoogle() async {
     setState(() => _isLoading = true);
     
     try {
-      
       // Sign out first to ensure fresh login
       await _googleSignIn.signOut();
       
@@ -170,12 +188,10 @@ class _RegisterPageState extends State<RegisterPage> {
         return;
       }
       
-      
       // Get authentication details
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       
-      
-      // ✅ NEW FLOW: Check if user exists first
+      // Check if user exists first
       await _handleGoogleRegistration(
         idToken: googleAuth.idToken,
         accessToken: googleAuth.accessToken,
@@ -194,7 +210,7 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  // ✅ NEW: Handle Google registration flow
+  // Handle Google registration flow
   Future<void> _handleGoogleRegistration({
     String? idToken,
     String? accessToken,
@@ -244,7 +260,7 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  // ✅ Process existing Google user (login)
+  // Process existing Google user (login)
   Future<void> _processExistingGoogleUser({
     String? idToken,
     String? accessToken,
@@ -260,6 +276,9 @@ class _RegisterPageState extends State<RegisterPage> {
         setState(() => _isLoading = false);
         
         if (result['success'] == true) {
+          // Register device token
+          await _registerDeviceToken();
+          
           // Show success message
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -305,7 +324,7 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  // ✅ Process new Google user (registration)
+  // Process new Google user (registration)
   Future<void> _processNewGoogleUser({
     String? idToken,
     String? accessToken,
@@ -321,6 +340,9 @@ class _RegisterPageState extends State<RegisterPage> {
         setState(() => _isLoading = false);
         
         if (result['success'] == true) {
+          // Register device token
+          await _registerDeviceToken();
+          
           // Show success message
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -354,7 +376,7 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  // ✅ UPDATED: Password setup dialog
+  // Password setup dialog
   Future<void> _showPasswordSetupDialog({bool isNewUser = false}) async {
     final passwordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
@@ -362,7 +384,7 @@ class _RegisterPageState extends State<RegisterPage> {
     
     await showDialog(
       context: context,
-      barrierDismissible: false, // Prevent closing without setting password
+      barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: const Text('Setup Password'),
@@ -759,7 +781,6 @@ class _RegisterPageState extends State<RegisterPage> {
                     Expanded(
                       child: GestureDetector(
                         onTap: () {
-                          // TODO: Show terms and conditions dialog
                           showDialog(
                             context: context,
                             builder: (context) => AlertDialog(

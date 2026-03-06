@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../widgets/animated_dots.dart';
 import 'intro_page.dart';
+import '../services/auth_service.dart';
+import '../providers/notification_provider.dart';
 
 class LoadingPage extends StatefulWidget {
   const LoadingPage({super.key});
@@ -42,6 +45,29 @@ class _LoadingPageState extends State<LoadingPage>
     _progressController.forward();
 
     Timer(const Duration(seconds: 2), () {
+      _checkAuthAndNavigate();
+    });
+  }
+
+  Future<void> _checkAuthAndNavigate() async {
+    try {
+      final isLoggedIn = await AuthService.isLoggedIn();
+      
+      if (isLoggedIn && mounted) {
+        // Register device token for existing session
+        try {
+          final notificationProvider = Provider.of<NotificationProvider>(
+            context, 
+            listen: false
+          );
+          await notificationProvider.registerDeviceTokenAfterLogin();
+        } catch (e) {
+          debugPrint('Failed to register device token on app start: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('Error checking auth status: $e');
+    } finally {
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -56,7 +82,7 @@ class _LoadingPageState extends State<LoadingPage>
           ),
         );
       }
-    });
+    }
   }
 
   @override

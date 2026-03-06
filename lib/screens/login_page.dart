@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:provider/provider.dart';
 import 'forgot_password_page.dart';
 import 'home_dashboard.dart';
 import '../services/auth_service.dart';
 import '../services/password_setup_service.dart';
+import '../providers/notification_provider.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -80,6 +82,20 @@ class _LoginPageState extends State<LoginPage> {
     return null;
   }
 
+  // Register device token after successful login
+  Future<void> _registerDeviceToken() async {
+    try {
+      final notificationProvider = Provider.of<NotificationProvider>(
+        context, 
+        listen: false
+      );
+      await notificationProvider.registerDeviceTokenAfterLogin();
+    } catch (e) {
+      debugPrint('Failed to register device token: $e');
+      // Don't block navigation if token registration fails
+    }
+  }
+
   void _login() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
@@ -104,6 +120,9 @@ class _LoginPageState extends State<LoginPage> {
             ),
           );
           
+          // Register device token
+          await _registerDeviceToken();
+          
           // Navigate to home
           Navigator.pushAndRemoveUntil(
             context,
@@ -123,13 +142,11 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // ✅ UPDATED: Google Sign-In for login flow
+  // Google Sign-In for login flow
   void _signInWithGoogle() async {
     setState(() => _isLoading = true);
 
-    
     try {
-      
       // Sign out first to ensure fresh login
       await _googleSignIn.signOut();
       
@@ -142,12 +159,10 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
       
-      
       // Get authentication details
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       
-      
-      // ✅ Process Google login
+      // Process Google login
       await _processGoogleLogin(
         idToken: googleAuth.idToken,
         accessToken: googleAuth.accessToken,
@@ -166,7 +181,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // ✅ UPDATED: Process Google login with existence check
+  // Process Google login with existence check
   Future<void> _processGoogleLogin({
     String? idToken,
     String? accessToken,
@@ -192,6 +207,9 @@ class _LoginPageState extends State<LoginPage> {
               backgroundColor: Colors.green,
             ),
           );
+          
+          // Register device token
+          await _registerDeviceToken();
           
           // Check if user needs password setup
           final requiresPasswordSetup = result['requiresPasswordSetup'] ?? false;
@@ -230,7 +248,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // ✅ UPDATED: Password setup dialog for Google users
+  // Password setup dialog for Google users
   Future<void> _showPasswordSetupDialog() async {
     final passwordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
@@ -238,7 +256,7 @@ class _LoginPageState extends State<LoginPage> {
     
     await showDialog(
       context: context,
-      barrierDismissible: false, // Prevent closing without setting password
+      barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: const Text('Setup Password'),
