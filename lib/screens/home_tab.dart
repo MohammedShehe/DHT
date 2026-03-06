@@ -4,9 +4,11 @@ import 'package:provider/provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/activity_provider.dart';
 import '../providers/gamification_provider.dart';
+import '../providers/smart_reminder_provider.dart';
 import '../services/auth_service.dart';
 import '../services/dashboard_service.dart';
 import '../models/dashboard_models.dart';
+import '../models/smart_reminder_model.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -30,8 +32,8 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     _loadUserName();
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final provider = Provider.of<DashboardProvider>(context, listen: false);
-      provider.onShowMessage = (String message, {bool isError = false}) {
+      final dashboardProvider = Provider.of<DashboardProvider>(context, listen: false);
+      dashboardProvider.onShowMessage = (String message, {bool isError = false}) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -45,6 +47,10 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       };
       
       _animationController.forward();
+      
+      // Load smart reminders
+      final reminderProvider = Provider.of<SmartReminderProvider>(context, listen: false);
+      reminderProvider.loadReminders();
     });
   }
 
@@ -109,6 +115,46 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
         actions: [
+          // Smart Reminder Bell
+          Consumer<SmartReminderProvider>(
+            builder: (context, reminderProvider, child) {
+              return Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined),
+                    onPressed: () {
+                      _showRemindersDialog(context, reminderProvider);
+                    },
+                  ),
+                  if (reminderProvider.unreadCount > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          '${reminderProvider.unreadCount}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
@@ -117,6 +163,9 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               
               Provider.of<ActivityProvider>(context, listen: false).loadActivityData();
               Provider.of<GamificationProvider>(context, listen: false).loadGoals();
+              
+              // Refresh smart reminders
+              Provider.of<SmartReminderProvider>(context, listen: false).loadReminders(forceRefresh: true);
               
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -130,8 +179,8 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
           ),
         ],
       ),
-      body: Consumer<DashboardProvider>(
-        builder: (context, provider, child) {
+      body: Consumer2<DashboardProvider, SmartReminderProvider>(
+        builder: (context, provider, reminderProvider, child) {
           if (provider.isLoading && provider.summary == null) {
             return const Center(
               child: CircularProgressIndicator(
@@ -141,7 +190,10 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
           }
 
           return RefreshIndicator(
-            onRefresh: provider.loadDashboardData,
+            onRefresh: () async {
+              await provider.loadDashboardData();
+              await reminderProvider.loadReminders(forceRefresh: true);
+            },
             color: const Color(0xFF00C853),
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -158,6 +210,8 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                   _buildWeeklyChart(provider.weeklySummary),
                   const SizedBox(height: 24),
                   _buildRecentActivities(provider.recentActivities),
+                  const SizedBox(height: 24),
+                  _buildSmartReminders(reminderProvider),
                   const SizedBox(height: 24),
                   _buildHealthTips(provider.healthTips),
                 ],
@@ -451,7 +505,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       );
     }
 
-    // Get goals from summary if available
     final goals = summary.goalsProgress ?? {};
     
     int stepsGoal = goals['steps']?['goal'] ?? 10000;
@@ -460,7 +513,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     int meditationGoal = goals['meditation']?['goal'] ?? 10;
     int caloriesGoal = goals['calories']?['goal'] ?? 60000;
     
-    // Current month progress for calories
     int caloriesThisMonth = goals['calories']?['current'] ?? 0;
     
     return Card(
@@ -518,7 +570,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   Widget _buildProgressRow(String label, double current, double goal, IconData icon, Color color) {
     final percentage = goal > 0 ? (current / goal).clamp(0.0, 1.0) : 0.0;
     
-    // Format current value with 1 decimal if it's not a whole number
     String currentFormatted;
     if (current == current.roundToDouble()) {
       currentFormatted = current.toInt().toString();
@@ -526,7 +577,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       currentFormatted = current.toStringAsFixed(1);
     }
     
-    // Format goal similarly
     String goalFormatted;
     if (goal == goal.roundToDouble()) {
       goalFormatted = goal.toInt().toString();
@@ -589,9 +639,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
 
     final stepsData = (weeklyData['steps'] as List?)?.cast<double>() ?? [0, 0, 0, 0, 0, 0, 0];
     final labels = weeklyData['labels'] as List<String>? ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    final hasData = weeklyData['hasData'] ?? true;
-
-    // Check if there's actually any data (some values > 0)
     bool hasAnyData = stepsData.any((value) => value > 0);
 
     return Card(
@@ -702,7 +749,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             ),
             TextButton(
               onPressed: () {
-                // Navigate to activity tab
                 _navigateToActivity('/activity');
               },
               child: const Text('View All'),
@@ -761,6 +807,280 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             },
           ),
       ],
+    );
+  }
+
+  // NEW: Smart Reminders Section
+  Widget _buildSmartReminders(SmartReminderProvider provider) {
+    final unreadReminders = provider.unreadReminders;
+    
+    if (unreadReminders.isEmpty) {
+      return const SizedBox();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'Smart Insights',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.amber,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${unreadReminders.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (unreadReminders.length > 3)
+              TextButton(
+                onPressed: () => _showRemindersDialog(context, provider),
+                child: const Text('View All'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        
+        // Show only top 3 unread reminders
+        ...unreadReminders.take(3).map((reminder) => _buildSmartReminderCard(context, reminder, provider)),
+      ],
+    );
+  }
+
+  // NEW: Smart Reminder Card
+  Widget _buildSmartReminderCard(BuildContext context, SmartReminder reminder, SmartReminderProvider provider) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      color: reminder.priority == ReminderPriority.critical
+          ? Colors.red.withOpacity(0.05)
+          : reminder.priority == ReminderPriority.high
+              ? Colors.orange.withOpacity(0.05)
+              : null,
+      child: InkWell(
+        onTap: () {
+          provider.executeAction(reminder, context);
+          provider.markAsRead(reminder.id);
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Icon
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: reminder.color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  reminder.icon,
+                  color: reminder.color,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              
+              // Content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            reminder.title,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: reminder.color.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            reminder.priority.toString().split('.').last.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 8,
+                              color: reminder.color,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      reminder.message,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 10,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          DateFormat.jm().format(reminder.timestamp),
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                        if (reminder.pointsReward != null && reminder.pointsReward! > 0) ...[
+                          const SizedBox(width: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.stars, size: 8, color: Colors.amber),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '+${reminder.pointsReward}',
+                                  style: const TextStyle(
+                                    fontSize: 8,
+                                    color: Colors.amber,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Action indicator
+              if (reminder.actionType != null)
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 12,
+                  color: Colors.grey[400],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // NEW: Show all reminders dialog
+  void _showRemindersDialog(BuildContext context, SmartReminderProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Smart Insights',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                ),
+                TextButton(
+                  onPressed: () {
+                    provider.markAllAsRead();
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Mark all read'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: provider.reminders.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.lightbulb_outline, size: 48, color: Colors.grey[300]),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No insights yet',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Continue using the app to get personalized insights',
+                            style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: provider.reminders.length,
+                      itemBuilder: (context, index) {
+                        final reminder = provider.reminders[index];
+                        return _buildSmartReminderCard(context, reminder, provider);
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -869,7 +1189,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               Colors.blue,
               () {
                 Navigator.pop(context);
-                // Navigate to steps logging
                 _navigateToActivity('/activity?tab=steps');
               },
             ),
