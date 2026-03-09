@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // NEW
 import 'screens/loading_page.dart';
 import 'services/auth_service.dart';
+import 'services/notification_permission_service.dart'; // NEW
 import 'providers/activity_provider.dart';
 import 'providers/gamification_provider.dart';
 import 'providers/dashboard_provider.dart';
@@ -16,15 +18,25 @@ import 'providers/smart_reminder_provider.dart';
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   print("Handling a background message: ${message.messageId}");
+  
+  // Show local notification for background messages
+  await NotificationPermissionService.showLocalNotification(
+    title: message.notification?.title ?? 'New Notification',
+    body: message.notification?.body ?? '',
+    payload: message.data.toString(),
+  );
 }
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  WidgetsBinding.ensureInitialized();
   
   // Initialize Firebase
   try {
     await Firebase.initializeApp();
     print('🔥 Firebase initialized successfully');
+    
+    // Initialize local notifications
+    await NotificationPermissionService.initializeLocalNotifications();
     
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
     await _setupNotifications();
@@ -76,6 +88,13 @@ Future<void> _setupNotifications() async {
       print('📨 Got a message whilst in the foreground!');
       if (message.notification != null) {
         print('Message also contained a notification: ${message.notification}');
+        
+        // Show local notification for foreground messages
+        NotificationPermissionService.showLocalNotification(
+          title: message.notification!.title ?? 'New Notification',
+          body: message.notification!.body ?? '',
+          payload: message.data.toString(),
+        );
       }
     });
     

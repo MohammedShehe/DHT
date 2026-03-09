@@ -3,6 +3,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:provider/provider.dart';
 import 'forgot_password_page.dart';
+import 'register_page.dart';
 import 'home_dashboard.dart';
 import '../services/auth_service.dart';
 import '../services/password_setup_service.dart';
@@ -91,8 +92,7 @@ class _LoginPageState extends State<LoginPage> {
       );
       await notificationProvider.registerDeviceTokenAfterLogin();
     } catch (e) {
-      debugPrint('Failed to register device token: $e');
-      // Don't block navigation if token registration fails
+      // Silently handle token registration failure - doesn't affect user experience
     }
   }
 
@@ -629,11 +629,14 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 32),
 
-                // Sign Up option
+                // Sign Up option - FIXED NAVIGATION
                 Center(
                   child: GestureDetector(
                     onTap: () {
-                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const RegisterPage()),
+                      );
                     },
                     child: RichText(
                       text: TextSpan(

@@ -8,6 +8,7 @@ import '../services/account_service.dart';
 import '../services/password_setup_service.dart';
 import '../services/health_service.dart';
 import '../services/goal_service.dart';
+import '../services/notification_permission_service.dart'; // NEW
 import '../utils/api_config.dart';
 import '../models/health_profile_model.dart';
 import 'login_page.dart';
@@ -54,6 +55,10 @@ class _ProfileTabState extends State<ProfileTab> {
   bool _notificationsEnabled = true;
   bool _dataSyncEnabled = true;
   
+  // Notification permission state - NEW
+  bool _isCheckingNotificationPermission = false;
+  String? _notificationPermissionError;
+  
   // Form controllers
   final TextEditingController _currentPasswordController = TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
@@ -99,6 +104,7 @@ class _ProfileTabState extends State<ProfileTab> {
       _loadProfileData();
       _loadHealthProfile();
       _loadRealStats();
+      _checkNotificationPermission(); // NEW
     });
   }
 
@@ -112,6 +118,135 @@ class _ProfileTabState extends State<ProfileTab> {
     _newEmailController.dispose();
     _emailOtpController.dispose();
     super.dispose();
+  }
+
+  // NEW: Check notification permission status
+  Future<void> _checkNotificationPermission() async {
+    setState(() {
+      _isCheckingNotificationPermission = true;
+      _notificationPermissionError = null;
+    });
+    
+    try {
+      final isGranted = await NotificationPermissionService.checkNotificationPermission();
+      if (mounted) {
+        setState(() {
+          _notificationsEnabled = isGranted;
+          _isCheckingNotificationPermission = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _notificationPermissionError = e.toString();
+          _isCheckingNotificationPermission = false;
+        });
+      }
+    }
+  }
+
+  // NEW: Toggle notifications (request permission)
+  Future<void> _toggleNotifications(bool value) async {
+    if (value) {
+      // Request permission
+      setState(() {
+        _isCheckingNotificationPermission = true;
+      });
+      
+      try {
+        final isGranted = await NotificationPermissionService.requestNotificationPermission();
+        
+        if (mounted) {
+          setState(() {
+            _notificationsEnabled = isGranted;
+            _isCheckingNotificationPermission = false;
+          });
+          
+          if (isGranted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Notifications enabled successfully'),
+                backgroundColor: Color(0xFF00C853),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          } else {
+            _showPermissionDeniedDialog();
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _notificationsEnabled = false;
+            _isCheckingNotificationPermission = false;
+            _notificationPermissionError = e.toString();
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error enabling notifications: $e'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } else {
+      // Cannot programmatically disable, show settings dialog
+      _showDisableNotificationDialog();
+    }
+  }
+
+  // NEW: Show permission denied dialog
+  void _showPermissionDeniedDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Permission Denied'),
+        content: const Text(
+          'You have denied notification permission. You can enable it later in your device settings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              NotificationPermissionService.openAppSettings();
+            },
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // NEW: Show disable notification dialog
+  void _showDisableNotificationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Disable Notifications'),
+        content: const Text(
+          'To disable notifications, you need to go to your device settings and turn them off manually.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              NotificationPermissionService.openAppSettings();
+            },
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
   }
 
   // Load real stats from backend
@@ -141,7 +276,6 @@ class _ProfileTabState extends State<ProfileTab> {
       if (results[0] != null && results[0]['success'] == true) {
         final data = results[0]['data'];
         if (data != null && data is Map) {
-          // Safely extract walked_today which could be int, double, or String
           final walkedToday = data['walked_today'];
           if (walkedToday != null) {
             if (walkedToday is int) {
@@ -219,7 +353,7 @@ class _ProfileTabState extends State<ProfileTab> {
         }
       }
 
-      // Parse workouts - FIXED VERSION
+      // Parse workouts
       if (results[3] != null && results[3]['success'] == true) {
         final logs = results[3]['data'];
         if (logs is List) {
@@ -452,6 +586,9 @@ class _ProfileTabState extends State<ProfileTab> {
     setState(() => _isLoggingOut = true);
     
     try {
+      // Delete FCM token when logging out - NEW
+      await NotificationPermissionService.deleteFCMToken();
+      
       final result = await AccountService.logout();
       
       if (!mounted) return;
@@ -478,6 +615,9 @@ class _ProfileTabState extends State<ProfileTab> {
     setState(() => _isLoggingOut = true);
     
     try {
+      // Delete FCM token when deleting account - NEW
+      await NotificationPermissionService.deleteFCMToken();
+      
       final result = await AccountService.confirmDeleteAccount(otp);
       
       if (!mounted) return;
@@ -1875,6 +2015,7 @@ class _ProfileTabState extends State<ProfileTab> {
               _loadProfileData();
               _loadHealthProfile();
               _loadRealStats();
+              _checkNotificationPermission(); // NEW
             },
           ),
         ],
@@ -2004,17 +2145,37 @@ class _ProfileTabState extends State<ProfileTab> {
                           ),
                         ),
                         const Divider(height: 1),
+                        
+                        // UPDATED: Notifications Setting with real permission handling
                         _buildSettingItem(
                           icon: Icons.notifications,
                           title: 'Notifications',
-                          subtitle: 'Receive health reminders',
-                          trailing: Switch(
-                            value: _notificationsEnabled,
-                            onChanged: (value) => setState(() => _notificationsEnabled = value),
-                            activeColor: const Color(0xFF00C853),
-                          ),
+                          subtitle: _isCheckingNotificationPermission
+                              ? 'Checking permission...'
+                              : (_notificationsEnabled 
+                                  ? '✓ Enabled - You will receive health reminders' 
+                                  : 'Receive health reminders and alerts'),
+                          trailing: _isCheckingNotificationPermission
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : Switch(
+                                  value: _notificationsEnabled,
+                                  onChanged: _toggleNotifications,
+                                  activeColor: const Color(0xFF00C853),
+                                ),
+                          onTap: () async {
+                            if (_notificationsEnabled) {
+                              _showDisableNotificationDialog();
+                            } else {
+                              await _toggleNotifications(true);
+                            }
+                          },
                         ),
                         const Divider(height: 1),
+                        
                         _buildSettingItem(
                           icon: Icons.sync,
                           title: 'Data Sync',
