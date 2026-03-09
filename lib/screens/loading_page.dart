@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/animated_dots.dart';
 import 'intro_page.dart';
+import 'home_dashboard.dart';
 import '../services/auth_service.dart';
 import '../providers/notification_provider.dart';
 
@@ -52,23 +53,61 @@ class _LoadingPageState extends State<LoadingPage>
   Future<void> _checkAuthAndNavigate() async {
     try {
       final isLoggedIn = await AuthService.isLoggedIn();
+      final tokenValid = await AuthService.isTokenValid();
       
-      if (isLoggedIn && mounted) {
-        // Register device token for existing session
-        try {
-          final notificationProvider = Provider.of<NotificationProvider>(
-            context, 
-            listen: false
+      if (mounted) {
+        if (isLoggedIn && tokenValid) {
+          // User is logged in and token is valid - go to dashboard
+          
+          // Register device token for existing session
+          try {
+            final notificationProvider = Provider.of<NotificationProvider>(
+              context, 
+              listen: false
+            );
+            await notificationProvider.registerDeviceTokenAfterLogin();
+          } catch (e) {
+            debugPrint('Failed to register device token on app start: $e');
+          }
+          
+          // Navigate to home dashboard
+          Navigator.pushReplacement(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (_, __, ___) => const HomeDashboard(),
+              transitionsBuilder: (_, animation, __, child) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: child,
+                );
+              },
+            ),
           );
-          await notificationProvider.registerDeviceTokenAfterLogin();
-        } catch (e) {
-          debugPrint('Failed to register device token on app start: $e');
+        } else {
+          // User is not logged in or token is invalid - go to intro page
+          if (isLoggedIn && !tokenValid) {
+            // Token is invalid/expired, clear it
+            await AuthService.clearToken();
+          }
+          
+          Navigator.pushReplacement(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (_, __, ___) => const IntroPage(),
+              transitionsBuilder: (_, animation, __, child) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: child,
+                );
+              },
+            ),
+          );
         }
       }
     } catch (e) {
       debugPrint('Error checking auth status: $e');
-    } finally {
       if (mounted) {
+        // On error, go to intro page
         Navigator.pushReplacement(
           context,
           PageRouteBuilder(

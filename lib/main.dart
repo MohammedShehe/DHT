@@ -9,7 +9,7 @@ import 'providers/activity_provider.dart';
 import 'providers/gamification_provider.dart';
 import 'providers/dashboard_provider.dart';
 import 'providers/notification_provider.dart';
-import 'providers/smart_reminder_provider.dart'; // NEW
+import 'providers/smart_reminder_provider.dart';
 
 // Add this for background message handling
 @pragma('vm:entry-point')
@@ -34,6 +34,7 @@ void main() async {
     print('Stack: $stack');
   }
   
+  // Initialize AuthService before app starts
   await AuthService.initializeToken();
   
   await SystemChrome.setPreferredOrientations([
@@ -104,7 +105,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => GamificationProvider()),
         ChangeNotifierProvider(create: (_) => DashboardProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
-        ChangeNotifierProvider(create: (_) => SmartReminderProvider()), // NEW
+        ChangeNotifierProvider(create: (_) => SmartReminderProvider()),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,

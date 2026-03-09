@@ -9,6 +9,14 @@ import '../services/auth_service.dart';
 import '../services/dashboard_service.dart';
 import '../models/dashboard_models.dart';
 import '../models/smart_reminder_model.dart';
+import '../widgets/add_hydration_dialog.dart';
+import '../widgets/add_meal_dialog.dart';
+import '../widgets/add_workout_dialog.dart';
+import '../widgets/add_sleep_dialog.dart';
+import '../widgets/add_medication_dialog.dart';
+import 'activity_tab.dart';
+import 'gamification_tab.dart';
+import '../models/gamification_models.dart' as gamification;
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -92,18 +100,472 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     super.dispose();
   }
 
-  void _navigateToActivity(String route) {
-    // Navigate to the appropriate tab in ActivityTab
-    int tabIndex = 0;
+  void _navigateToActivityTab({int tabIndex = 0}) {
+    // Update the bottom navigation bar to activity tab with specific index
+    // This assumes the parent HomeDashboard has a method to change tabs
+    // For now, we'll just show a snackbar and rely on the actual navigation
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Opening Activity Tab...'),
+        backgroundColor: Colors.green,
+        duration: const Duration(milliseconds: 500),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
     
-    if (route.contains('tab=0')) tabIndex = 0;
-    else if (route.contains('tab=1')) tabIndex = 1;
-    else if (route.contains('tab=2')) tabIndex = 2;
-    else if (route.contains('tab=3')) tabIndex = 3;
-    else if (route.contains('tab=4')) tabIndex = 4;
+    // In a real app, you would update the bottom nav bar index
+    // This would need to be handled by the parent widget
+    // For now, we'll just navigate to the ActivityTab directly
+    // Navigator.push(
+    //   context,
+    //   MaterialPageRoute(builder: (context) => const ActivityTab()),
+    // );
+  }
+
+  void _navigateToGamificationTab({int tabIndex = 0}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Opening Gamification Tab...'),
+        backgroundColor: Colors.amber,
+        duration: const Duration(milliseconds: 500),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showQuickLogOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Quick Log',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 16),
+            _buildQuickLogOption(
+              'Log Steps',
+              Icons.directions_walk,
+              Colors.blue,
+              () {
+                Navigator.pop(context);
+                _showLogStepsDialog();
+              },
+            ),
+            _buildQuickLogOption(
+              'Log Water',
+              Icons.local_drink,
+              Colors.cyan,
+              () {
+                Navigator.pop(context);
+                _showAddHydrationDialog();
+              },
+            ),
+            _buildQuickLogOption(
+              'Log Sleep',
+              Icons.bedtime,
+              Colors.purple,
+              () {
+                Navigator.pop(context);
+                _showAddSleepDialog();
+              },
+            ),
+            _buildQuickLogOption(
+              'Log Meditation',
+              Icons.self_improvement,
+              Colors.indigo,
+              () {
+                Navigator.pop(context);
+                _showLogMeditationDialog();
+              },
+            ),
+            _buildQuickLogOption(
+              'Log Meal',
+              Icons.restaurant,
+              Colors.green,
+              () {
+                Navigator.pop(context);
+                _showAddMealDialog();
+              },
+            ),
+            _buildQuickLogOption(
+              'Log Workout',
+              Icons.fitness_center,
+              Colors.orange,
+              () {
+                Navigator.pop(context);
+                _showAddWorkoutDialog();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLogStepsDialog() {
+    final TextEditingController controller = TextEditingController();
     
-    // Navigate to activity tab with specific index
-    // This would need to be implemented based on your navigation structure
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Log Steps'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter the number of steps you walked:'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Steps',
+                border: OutlineInputBorder(),
+                suffixText: 'steps',
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final steps = int.tryParse(controller.text);
+              if (steps != null && steps > 0) {
+                final provider = Provider.of<GamificationProvider>(context, listen: false);
+                provider.logActivityProgress(
+                  type: gamification.GoalType.steps,
+                  value: steps.toDouble(),
+                );
+                Navigator.pop(context);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid number'),
+                    backgroundColor: Colors.red,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Log Steps'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLogMeditationDialog() {
+    final TextEditingController controller = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Log Meditation'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter meditation duration in minutes:'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Minutes',
+                border: OutlineInputBorder(),
+                suffixText: 'min',
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final minutes = int.tryParse(controller.text);
+              if (minutes != null && minutes > 0) {
+                final provider = Provider.of<GamificationProvider>(context, listen: false);
+                provider.logActivityProgress(
+                  type: gamification.GoalType.meditation,
+                  value: minutes.toDouble(),
+                );
+                Navigator.pop(context);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid number'),
+                    backgroundColor: Colors.red,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.indigo,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Log Meditation'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddHydrationDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const AddHydrationDialog(),
+    );
+  }
+
+  void _showAddMealDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const AddMealDialog(),
+    );
+  }
+
+  void _showAddWorkoutDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const AddWorkoutDialog(),
+    );
+  }
+
+  void _showAddSleepDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const AddSleepDialog(),
+    );
+  }
+
+  void _showAddMedicationDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const AddMedicationDialog(),
+    );
+  }
+
+  void _showFullWeeklySummary() {
+    final provider = Provider.of<DashboardProvider>(context, listen: false);
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Weekly Activity Summary',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${DateFormat('MMM d').format(DateTime.now().subtract(const Duration(days: 6)))} - ${DateFormat('MMM d, yyyy').format(DateTime.now())}',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _buildDetailedStatCard(
+                      'Steps',
+                      provider.weeklySummary?['steps'] ?? [0, 0, 0, 0, 0, 0, 0],
+                      Colors.blue,
+                      'steps',
+                    ),
+                    const SizedBox(height: 16),
+                    _buildDetailedStatCard(
+                      'Water',
+                      provider.weeklySummary?['water'] ?? [0, 0, 0, 0, 0, 0, 0],
+                      Colors.cyan,
+                      'glasses',
+                    ),
+                    const SizedBox(height: 16),
+                    _buildDetailedStatCard(
+                      'Sleep',
+                      provider.weeklySummary?['sleep'] ?? [0, 0, 0, 0, 0, 0, 0],
+                      Colors.purple,
+                      'hours',
+                    ),
+                    const SizedBox(height: 16),
+                    _buildDetailedStatCard(
+                      'Meditation',
+                      provider.weeklySummary?['meditation'] ?? [0, 0, 0, 0, 0, 0, 0],
+                      Colors.indigo,
+                      'minutes',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailedStatCard(String title, List<dynamic> data, Color color, String unit) {
+    final numericData = data.map((e) => e is int ? e.toDouble() : (e as double?) ?? 0.0).toList();
+    final total = numericData.reduce((a, b) => a + b);
+    final average = total / numericData.length;
+    
+    // Format based on unit
+    String formattedTotal;
+    if (unit == 'hours') {
+      formattedTotal = total.toStringAsFixed(1);
+    } else {
+      formattedTotal = total.toInt().toString();
+    }
+    
+    String formattedAvg;
+    if (unit == 'hours') {
+      formattedAvg = average.toStringAsFixed(1);
+    } else {
+      formattedAvg = average.toInt().toString();
+    }
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Avg: $formattedAvg $unit',
+                    style: TextStyle(color: color, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Total: $formattedTotal $unit',
+              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 80,
+              child: Row(
+                children: List.generate(numericData.length, (index) {
+                  final maxValue = numericData.reduce((a, b) => a > b ? a : b);
+                  final barHeight = maxValue > 0 
+                      ? (numericData[index] / maxValue) * 60 
+                      : 0.0;
+                  
+                  return Expanded(
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            alignment: Alignment.bottomCenter,
+                            child: Container(
+                              width: 12,
+                              height: barHeight,
+                              decoration: BoxDecoration(
+                                color: numericData[index] > 0 ? color : Colors.grey[300],
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(4),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          ['M', 'T', 'W', 'T', 'F', 'S', 'S'][index],
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: numericData[index] > 0 ? Colors.black : Colors.grey[500],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickLogOption(String label, IconData icon, Color color, VoidCallback onTap) {
+    return ListTile(
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: color),
+      ),
+      title: Text(label),
+      onTap: onTap,
+    );
   }
 
   @override
@@ -221,7 +683,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showQuickLogOptions(context),
+        onPressed: _showQuickLogOptions,
         backgroundColor: const Color(0xFF00C853),
         child: const Icon(Icons.add, color: Colors.white),
       ),
@@ -305,25 +767,31 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                     ),
                   ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.local_fire_department, color: Colors.white, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${summary.currentStreak} day streak',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
+                GestureDetector(
+                  onTap: () {
+                    // Navigate to gamification tab to see streaks
+                    _navigateToGamificationTab(tabIndex: 0);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.local_fire_department, color: Colors.white, size: 16),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${summary.currentStreak} day streak',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -371,27 +839,45 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             Row(
               children: [
                 Expanded(
-                  child: Tooltip(
-                    message: 'Total Daily Energy Expenditure\n(BMR + Daily Activity + Exercise)',
-                    preferBelow: false,
-                    child: _buildMetricChip(
-                      summary.caloriesBurned.toString(),
-                      'TDEE',
+                  child: GestureDetector(
+                    onTap: () {
+                      // Navigate to activity tab to see more stats
+                      _navigateToActivityTab(tabIndex: 1); // Workouts tab
+                    },
+                    child: Tooltip(
+                      message: 'Total Daily Energy Expenditure\n(BMR + Daily Activity + Exercise)',
+                      preferBelow: false,
+                      child: _buildMetricChip(
+                        summary.caloriesBurned.toString(),
+                        'TDEE (kcal)',
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _buildMetricChip(
-                    summary.stepsToday.toString(),
-                    'Steps',
+                  child: GestureDetector(
+                    onTap: () {
+                      // Navigate to activity tab - steps tab
+                      _navigateToActivityTab(tabIndex: 1); // Workouts tab since steps are part of activity
+                    },
+                    child: _buildMetricChip(
+                      summary.stepsToday.toString(),
+                      'Steps Today',
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _buildMetricChip(
-                    summary.sleepHours.toStringAsFixed(1),
-                    'Sleep (hrs)',
+                  child: GestureDetector(
+                    onTap: () {
+                      // Navigate to activity tab - sleep tab
+                      _navigateToActivityTab(tabIndex: 2); // Sleep tab
+                    },
+                    child: _buildMetricChip(
+                      summary.sleepHours.toStringAsFixed(1),
+                      'Sleep (hrs)',
+                    ),
                   ),
                 ),
               ],
@@ -437,58 +923,116 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 
   Widget _buildQuickActions() {
-    final actions = DashboardService.getQuickActions();
-    
-    return GridView.builder(
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        childAspectRatio: 0.9,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: actions.length,
-      itemBuilder: (context, index) {
-        final action = actions[index];
-        return _buildQuickActionItem(
-          action['icon'] as IconData,
-          action['label'] as String,
-          action['color'] as Color,
-          action['route'] as String,
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Quick Actions',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildQuickActionItem(
+              Icons.directions_walk,
+              'Log Steps',
+              Colors.blue,
+              () => _showLogStepsDialog(),
+            ),
+            _buildQuickActionItem(
+              Icons.local_drink,
+              'Log Water',
+              Colors.cyan,
+              _showAddHydrationDialog,
+            ),
+            _buildQuickActionItem(
+              Icons.restaurant,
+              'Log Meal',
+              Colors.green,
+              _showAddMealDialog,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildQuickActionItem(
+              Icons.fitness_center,
+              'Workout',
+              Colors.orange,
+              _showAddWorkoutDialog,
+            ),
+            _buildQuickActionItem(
+              Icons.bedtime,
+              'Log Sleep',
+              Colors.purple,
+              _showAddSleepDialog,
+            ),
+            _buildQuickActionItem(
+              Icons.self_improvement,
+              'Meditate',
+              Colors.indigo,
+              _showLogMeditationDialog,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildQuickActionItem(
+              Icons.medication,
+              'Medication',
+              Colors.pink,
+              _showAddMedicationDialog,
+            ),
+            _buildQuickActionItem(
+              Icons.emoji_events,
+              'View Goals',
+              Colors.amber,
+              () => _navigateToGamificationTab(tabIndex: 1),
+            ),
+            _buildQuickActionItem(
+              Icons.bar_chart,
+              'View Stats',
+              Colors.teal,
+              _showFullWeeklySummary,
+            ),
+          ],
+        ),
+      ],
     );
   }
 
-  Widget _buildQuickActionItem(IconData icon, String label, Color color, String route) {
+  Widget _buildQuickActionItem(IconData icon, String label, Color color, VoidCallback onTap) {
     return InkWell(
-      onTap: () => _navigateToActivity(route),
+      onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 52,
-            height: 52,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
               color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(icon, color: color, size: 26),
+            child: Icon(icon, color: color, size: 24),
           ),
           const SizedBox(height: 4),
           Text(
             label,
-            textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 9,
+              fontSize: 10,
               fontWeight: FontWeight.w500,
               color: Colors.grey[700],
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -511,9 +1055,11 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     double waterGoal = (goals['water']?['goal'] ?? 8).toDouble();
     double sleepGoal = (goals['sleep']?['goal'] ?? 8.0).toDouble();
     int meditationGoal = goals['meditation']?['goal'] ?? 10;
+    int workoutsGoal = goals['workouts']?['goal'] ?? 5;
     int caloriesGoal = goals['calories']?['goal'] ?? 60000;
     
     int caloriesThisMonth = goals['calories']?['current'] ?? 0;
+    int workoutsThisWeek = goals['workouts']?['current'] ?? 0;
     
     return Card(
       elevation: 2,
@@ -521,45 +1067,85 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text(
+              'Daily Progress',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 16),
+            
             _buildProgressRow(
               'Steps',
               summary.stepsToday.toDouble(),
               stepsGoal.toDouble(),
               Icons.directions_walk,
               Colors.blue,
+              'steps',
             ),
             const SizedBox(height: 12),
+            
             _buildProgressRow(
               'Water',
               summary.waterGlasses,
               waterGoal,
               Icons.local_drink,
               Colors.cyan,
+              'glasses',
             ),
             const SizedBox(height: 12),
+            
             _buildProgressRow(
               'Sleep',
               summary.sleepHours,
               sleepGoal,
               Icons.bedtime,
               Colors.purple,
+              'hours',
             ),
             const SizedBox(height: 12),
+            
             _buildProgressRow(
               'Meditation',
               summary.meditationMinutes.toDouble(),
               meditationGoal.toDouble(),
               Icons.self_improvement,
               Colors.indigo,
+              'minutes',
             ),
             const SizedBox(height: 12),
+            
+            const Divider(),
+            const SizedBox(height: 8),
+            
+            const Text(
+              'Extended Goals',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            
             _buildProgressRow(
-              'Calories Consumed', 
+              'Workouts (This Week)',
+              workoutsThisWeek.toDouble(),
+              workoutsGoal.toDouble(),
+              Icons.fitness_center,
+              Colors.orange,
+              'workouts',
+            ),
+            const SizedBox(height: 12),
+            
+            _buildProgressRow(
+              'Calories (This Month)',
               caloriesThisMonth.toDouble(),
               caloriesGoal.toDouble(),
-              Icons.restaurant, 
-              Colors.orange,
+              Icons.local_fire_department,
+              Colors.red,
+              'kcal',
             ),
           ],
         ),
@@ -567,7 +1153,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     );
   }
 
-  Widget _buildProgressRow(String label, double current, double goal, IconData icon, Color color) {
+  Widget _buildProgressRow(String label, double current, double goal, IconData icon, Color color, String unit) {
     final percentage = goal > 0 ? (current / goal).clamp(0.0, 1.0) : 0.0;
     
     String currentFormatted;
@@ -584,51 +1170,69 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       goalFormatted = goal.toStringAsFixed(1);
     }
     
-    return Row(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
+    return InkWell(
+      onTap: () {
+        // Navigate to appropriate tab based on label
+        if (label.contains('Steps')) {
+          _navigateToActivityTab(tabIndex: 1);
+        } else if (label.contains('Water')) {
+          _navigateToActivityTab(tabIndex: 3);
+        } else if (label.contains('Sleep')) {
+          _navigateToActivityTab(tabIndex: 2);
+        } else if (label.contains('Meditation')) {
+          _navigateToGamificationTab(tabIndex: 0);
+        } else if (label.contains('Workouts')) {
+          _navigateToActivityTab(tabIndex: 1);
+        } else if (label.contains('Calories')) {
+          _navigateToActivityTab(tabIndex: 0);
+        }
+      },
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 18),
           ),
-          child: Icon(icon, color: color, size: 18),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(label, style: TextStyle(color: Colors.grey[700])),
-                  Text(
-                    goal > 0 
-                        ? '$currentFormatted/$goalFormatted'
-                        : currentFormatted,
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(label, style: TextStyle(color: Colors.grey[700], fontSize: 13)),
+                    Text(
+                      goal > 0 
+                          ? '$currentFormatted/$goalFormatted $unit'
+                          : '$currentFormatted $unit',
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              if (goal > 0)
-                LinearProgressIndicator(
-                  value: percentage,
-                  backgroundColor: Colors.grey[200],
-                  color: color,
-                  borderRadius: BorderRadius.circular(10),
-                  minHeight: 6,
+                  ],
                 ),
-            ],
+                const SizedBox(height: 4),
+                if (goal > 0)
+                  LinearProgressIndicator(
+                    value: percentage,
+                    backgroundColor: Colors.grey[200],
+                    color: color,
+                    borderRadius: BorderRadius.circular(10),
+                    minHeight: 6,
+                  ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -637,7 +1241,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       return const SizedBox();
     }
 
-    final stepsData = (weeklyData['steps'] as List?)?.cast<double>() ?? [0, 0, 0, 0, 0, 0, 0];
+    final stepsData = (weeklyData['steps'] as List?)?.cast<num>().map((e) => e.toDouble()).toList() ?? [0, 0, 0, 0, 0, 0, 0];
     final labels = weeklyData['labels'] as List<String>? ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     bool hasAnyData = stepsData.any((value) => value > 0);
 
@@ -649,9 +1253,27 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Weekly Steps',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Weekly Activity',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      'Steps breakdown by day',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+                TextButton(
+                  onPressed: _showFullWeeklySummary,
+                  child: const Text('View Details'),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             
@@ -687,41 +1309,54 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                         : 0.0;
                     
                     return Expanded(
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: Container(
-                              alignment: Alignment.bottomCenter,
+                      child: GestureDetector(
+                        onTap: () {
+                          // Show day details
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('${labels[index]}: ${stepsData[index].toInt()} steps'),
+                              backgroundColor: Colors.green,
+                              duration: const Duration(seconds: 1),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                        child: Column(
+                          children: [
+                            Expanded(
                               child: Container(
-                                width: 20,
-                                height: barHeight.toDouble(),
-                                decoration: BoxDecoration(
-                                  color: stepsData[index] > 0 ? Colors.green : Colors.grey[300],
-                                  borderRadius: const BorderRadius.vertical(
-                                    top: Radius.circular(4),
+                                alignment: Alignment.bottomCenter,
+                                child: Container(
+                                  width: 20,
+                                  height: barHeight.toDouble(),
+                                  decoration: BoxDecoration(
+                                    color: stepsData[index] > 0 ? Colors.green : Colors.grey[300],
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(4),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            labels[index],
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: stepsData[index] > 0 ? Colors.black : Colors.grey[500],
-                            ),
-                          ),
-                          if (stepsData[index] > 0)
+                            const SizedBox(height: 8),
                             Text(
-                              stepsData[index].toInt().toString(),
+                              labels[index],
                               style: TextStyle(
-                                fontSize: 9,
-                                color: Colors.green,
-                                fontWeight: FontWeight.w600,
+                                fontSize: 10,
+                                color: stepsData[index] > 0 ? Colors.black : Colors.grey[500],
                               ),
                             ),
-                        ],
+                            if (stepsData[index] > 0)
+                              Text(
+                                stepsData[index].toInt().toString(),
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.green,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     );
                   }),
@@ -740,16 +1375,25 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'Recent Activities',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Recent Activities',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  'Your latest logs',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+              ],
             ),
             TextButton(
               onPressed: () {
-                _navigateToActivity('/activity');
+                _navigateToActivityTab(tabIndex: 0);
               },
               child: const Text('View All'),
             ),
@@ -771,6 +1415,11 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                       'No recent activities',
                       style: TextStyle(color: Colors.grey),
                     ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Tap the + button to log your first activity',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
                   ],
                 ),
               ),
@@ -783,24 +1432,40 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             itemCount: activities.length > 5 ? 5 : activities.length,
             itemBuilder: (context, index) {
               final activity = activities[index];
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: ListTile(
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: activity.color.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
+              return GestureDetector(
+                onTap: () {
+                  // Navigate to appropriate tab based on activity type
+                  if (activity.type == 'steps' || activity.type == 'workout') {
+                    _navigateToActivityTab(tabIndex: 1);
+                  } else if (activity.type == 'water') {
+                    _navigateToActivityTab(tabIndex: 3);
+                  } else if (activity.type == 'sleep') {
+                    _navigateToActivityTab(tabIndex: 2);
+                  } else if (activity.type == 'meal' || activity.type == 'calories') {
+                    _navigateToActivityTab(tabIndex: 0);
+                  } else if (activity.type == 'meditation') {
+                    _navigateToGamificationTab(tabIndex: 0);
+                  }
+                },
+                child: Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: ListTile(
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: activity.color.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(activity.icon, color: activity.color, size: 20),
                     ),
-                    child: Icon(activity.icon, color: activity.color, size: 20),
-                  ),
-                  title: Text(activity.title),
-                  subtitle: Text(activity.subtitle),
-                  trailing: Text(
-                    DateFormat.jm().format(activity.timestamp),
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    title: Text(activity.title),
+                    subtitle: Text(activity.subtitle),
+                    trailing: Text(
+                      DateFormat.jm().format(activity.timestamp),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
                   ),
                 ),
               );
@@ -810,7 +1475,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     );
   }
 
-  // NEW: Smart Reminders Section
+  // Smart Reminders Section
   Widget _buildSmartReminders(SmartReminderProvider provider) {
     final unreadReminders = provider.unreadReminders;
     
@@ -866,7 +1531,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     );
   }
 
-  // NEW: Smart Reminder Card
+  // Smart Reminder Card
   Widget _buildSmartReminderCard(BuildContext context, SmartReminder reminder, SmartReminderProvider provider) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1007,7 +1672,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     );
   }
 
-  // NEW: Show all reminders dialog
+  // Show all reminders dialog
   void _showRemindersDialog(BuildContext context, SmartReminderProvider provider) {
     showModalBottomSheet(
       context: context,
@@ -1112,15 +1777,30 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 
   Widget _buildTipCard(HealthTip tip) {
-    return Container(
-      width: 240,
-      margin: const EdgeInsets.only(right: 12),
-      child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: InkWell(
-          onTap: tip.action != null ? () => _navigateToActivity(tip.action!) : null,
-          borderRadius: BorderRadius.circular(16),
+    return GestureDetector(
+      onTap: () {
+        if (tip.action != null) {
+          if (tip.action!.contains('water') || tip.action!.contains('hydration')) {
+            _showAddHydrationDialog();
+          } else if (tip.action!.contains('meal')) {
+            _showAddMealDialog();
+          } else if (tip.action!.contains('activity') || tip.action!.contains('steps')) {
+            _showLogStepsDialog();
+          } else if (tip.action!.contains('sleep')) {
+            _showAddSleepDialog();
+          } else if (tip.action!.contains('meditation')) {
+            _showLogMeditationDialog();
+          } else {
+            _navigateToActivityTab();
+          }
+        }
+      },
+      child: Container(
+        width: 240,
+        margin: const EdgeInsets.only(right: 12),
+        child: Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -1164,89 +1844,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
           ),
         ),
       ),
-    );
-  }
-
-  void _showQuickLogOptions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Quick Log',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 16),
-            _buildQuickLogOption(
-              'Log Steps',
-              Icons.directions_walk,
-              Colors.blue,
-              () {
-                Navigator.pop(context);
-                _navigateToActivity('/activity?tab=steps');
-              },
-            ),
-            _buildQuickLogOption(
-              'Log Water',
-              Icons.local_drink,
-              Colors.cyan,
-              () {
-                Navigator.pop(context);
-                _navigateToActivity('/activity?tab=3');
-              },
-            ),
-            _buildQuickLogOption(
-              'Log Sleep',
-              Icons.bedtime,
-              Colors.purple,
-              () {
-                Navigator.pop(context);
-                _navigateToActivity('/activity?tab=2');
-              },
-            ),
-            _buildQuickLogOption(
-              'Log Meditation',
-              Icons.self_improvement,
-              Colors.indigo,
-              () {
-                Navigator.pop(context);
-                _navigateToActivity('/activity?tab=meditation');
-              },
-            ),
-            _buildQuickLogOption(
-              'Log Meal',
-              Icons.restaurant,
-              Colors.green,
-              () {
-                Navigator.pop(context);
-                _navigateToActivity('/activity?tab=0');
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickLogOption(String label, IconData icon, Color color, VoidCallback onTap) {
-    return ListTile(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(icon, color: color),
-      ),
-      title: Text(label),
-      onTap: onTap,
     );
   }
 }

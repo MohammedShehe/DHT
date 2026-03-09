@@ -48,7 +48,7 @@ class AuthService {
     }
   }
 
-  // ✅ ADDED: Store token method (public version of _saveToken)
+  // Store token method (public version of _saveToken)
   static Future<void> storeToken(String token) async {
     await _saveToken(token);
   }
@@ -90,8 +90,6 @@ class AuthService {
   static Future<bool> _checkNetwork() async {
     try {
       if (kIsWeb) {
-        // For web, use navigator.onLine if available
-        // Fallback to true for web as connectivity_plus may not work perfectly on web
         return true;
       } else {
         final connectivityResult = await Connectivity().checkConnectivity();
@@ -131,7 +129,6 @@ class AuthService {
       final data = json.decode(response.body);
       
       if (response.statusCode == 201) {
-        // ✅ Save token if it exists in the response
         if (data['token'] != null) {
           await _saveToken(data['token']);
         }
@@ -140,7 +137,7 @@ class AuthService {
           'success': true,
           'message': data['message'],
           'userId': data['userId'],
-          'token': data['token'], // ✅ Include token in response
+          'token': data['token'],
         };
       } else {
         return {
@@ -223,11 +220,11 @@ class AuthService {
     }
   }
 
-  // ✅ UPDATED: Google OAuth login with user existence check
+  // Google OAuth login with user existence check
   static Future<Map<String, dynamic>> googleLogin({
     String? idToken,
     String? accessToken,
-    bool checkExistenceOnly = false, // NEW: For checking if user exists
+    bool checkExistenceOnly = false,
   }) async {
     if (!await _checkNetwork()) {
       return {
@@ -237,7 +234,6 @@ class AuthService {
     }
 
     try {
-      // Prepare request body
       Map<String, dynamic> requestBody = {};
       
       if (idToken != null) {
@@ -255,7 +251,6 @@ class AuthService {
         };
       }
 
-      // Add flag to check existence only (for registration flow)
       if (checkExistenceOnly) {
         requestBody['check_existence'] = true;
       }
@@ -269,16 +264,15 @@ class AuthService {
       final data = json.decode(response.body);
       
       if (response.statusCode == 200) {
-        // For existence check, don't save token
         if (!checkExistenceOnly) {
           await _saveToken(data['token']);
         }
         
         return {
           'success': true,
-          'message': data['message'],
+          'message': data['message'] ?? 'Google login successful',
           'token': checkExistenceOnly ? null : data['token'],
-          'userExists': data['userExists'] ?? true, // Default to true if not specified
+          'userExists': data['userExists'] ?? true,
           'requiresPasswordSetup': data['requiresPasswordSetup'] ?? false,
         };
       } else {
@@ -469,7 +463,7 @@ class AuthService {
   // Check if user is logged in
   static Future<bool> isLoggedIn() async {
     await initializeToken();
-    return _token != null;
+    return _token != null && _token!.isNotEmpty;
   }
 
   // Get stored token
@@ -478,13 +472,12 @@ class AuthService {
     return _token;
   }
 
-  // ✅ Get user ID from token (helper method)
+  // Get user ID from token
   static Future<String?> getUserId() async {
     final token = await getStoredToken();
     if (token == null) return null;
     
     try {
-      // Decode JWT token to get user info
       final parts = token.split('.');
       if (parts.length != 3) return null;
       
@@ -499,7 +492,7 @@ class AuthService {
     }
   }
 
-  // ✅ Get user email from token
+  // Get user email from token
   static Future<String?> getUserEmail() async {
     final token = await getStoredToken();
     if (token == null) return null;
@@ -519,7 +512,7 @@ class AuthService {
     }
   }
 
-  // ✅ Logout method that also clears token
+  // Logout method that also clears token
   static Future<void> logout() async {
     try {
       // Call backend logout endpoint if needed
@@ -543,10 +536,10 @@ class AuthService {
     }
   }
 
-  // ✅ Check token validity
+  // Check token validity
   static Future<bool> isTokenValid() async {
     final token = await getStoredToken();
-    if (token == null) return false;
+    if (token == null || token.isEmpty) return false;
     
     try {
       // Check if token is expired
@@ -564,31 +557,29 @@ class AuthService {
       final expiryTime = DateTime.fromMillisecondsSinceEpoch(exp * 1000);
       final currentTime = DateTime.now();
       
-      // Check if token expires within 5 minutes (for refresh consideration)
-      final bufferTime = expiryTime.subtract(const Duration(minutes: 5));
-      return currentTime.isBefore(bufferTime);
+      // Token is valid if it hasn't expired yet
+      return currentTime.isBefore(expiryTime);
     } catch (e) {
       return false;
     }
   }
 
-  // ✅ Clear all authentication data
+  // Clear all authentication data
   static Future<void> clearAllAuthData() async {
     await clearToken();
     
     if (kIsWeb && _sharedPreferences != null) {
-      // Clear any other auth-related data from shared preferences
       await _sharedPreferences!.remove('user_email');
       await _sharedPreferences!.remove('user_name');
     }
   }
 
-  // ✅ Initialize the service (call this early in your app)
+  // Initialize the service (call this early in your app)
   static Future<void> initialize() async {
     await initializeToken();
   }
 
-  // ✅ Get authentication status with validity check
+  // Get authentication status with validity check
   static Future<Map<String, dynamic>> getAuthStatus() async {
     final hasToken = await isLoggedIn();
     final tokenValid = await isTokenValid();
@@ -600,7 +591,7 @@ class AuthService {
     };
   }
 
-  // ✅ Create headers for multipart requests (for file uploads)
+  // Create headers for multipart requests (for file uploads)
   static Future<Map<String, String>> getMultipartHeaders() async {
     final token = await getStoredToken();
     
@@ -613,7 +604,7 @@ class AuthService {
     };
   }
 
-  // ✅ Check if user exists via Google (for registration flow)
+  // Check if user exists via Google (for registration flow)
   static Future<Map<String, dynamic>> checkGoogleUserExists({
     String? idToken,
     String? accessToken,
@@ -625,7 +616,7 @@ class AuthService {
     );
   }
 
-  // ✅ Check if current user has password (using the password setup service)
+  // Check if current user has password
   static Future<Map<String, dynamic>> hasPassword() async {
     try {
       final headers = await getAuthHeaders();
