@@ -1,3 +1,4 @@
+// lib/widgets/custom_food_dialog.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/food_model.dart';
@@ -148,9 +149,11 @@ class _CustomFoodDialogState extends State<CustomFoodDialog> {
                       ),
                       const SizedBox(height: 12),
 
+                      // FIXED: Using Expanded to prevent overflow
                       Row(
                         children: [
                           Expanded(
+                            flex: 2,
                             child: TextFormField(
                               controller: _caloriesController,
                               keyboardType: TextInputType.number,
@@ -175,6 +178,7 @@ class _CustomFoodDialogState extends State<CustomFoodDialog> {
                           ),
                           const SizedBox(width: 8),
                           Expanded(
+                            flex: 2,
                             child: TextFormField(
                               controller: _servingSizeController,
                               decoration: InputDecoration(
@@ -185,27 +189,35 @@ class _CustomFoodDialogState extends State<CustomFoodDialog> {
                             ),
                           ),
                           const SizedBox(width: 8),
+                          // FIXED: Container with fixed width and proper sizing
                           Container(
-                            width: 80,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            width: 70, // Fixed width for the dropdown
                             decoration: BoxDecoration(
                               border: Border.all(color: Colors.grey[300]!),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: _servingUnit,
-                                items: _servingUnits.map((unit) {
-                                  return DropdownMenuItem(
-                                    value: unit,
-                                    child: Text(unit),
-                                  );
-                                }).toList(),
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    setState(() => _servingUnit = value);
-                                  }
-                                },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: _servingUnit,
+                                  items: _servingUnits.map((unit) {
+                                    return DropdownMenuItem(
+                                      value: unit,
+                                      child: Text(
+                                        unit,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      setState(() => _servingUnit = value);
+                                    }
+                                  },
+                                  isExpanded: true,
+                                  icon: const Icon(Icons.arrow_drop_down, size: 18),
+                                ),
                               ),
                             ),
                           ),
