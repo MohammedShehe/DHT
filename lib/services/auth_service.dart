@@ -10,7 +10,6 @@ import '../utils/api_config.dart';
 class AuthService {
   static String get baseUrl => '${ApiConfig.baseUrl}/auth';
   
-  // Storage instances for different platforms
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   static SharedPreferences? _sharedPreferences;
   
@@ -18,60 +17,48 @@ class AuthService {
 
   static String? get token => _token;
 
-  // Initialize token from appropriate storage
   static Future<void> initializeToken() async {
     if (kIsWeb) {
-      // For web, use shared_preferences
       if (_sharedPreferences == null) {
         _sharedPreferences = await SharedPreferences.getInstance();
       }
       _token = _sharedPreferences!.getString('auth_token');
     } else {
-      // For mobile, use secure storage
       _token = await _secureStorage.read(key: 'auth_token');
     }
   }
 
-  // Save token to appropriate storage
   static Future<void> _saveToken(String token) async {
     _token = token;
     
     if (kIsWeb) {
-      // For web, use shared_preferences
       if (_sharedPreferences == null) {
         _sharedPreferences = await SharedPreferences.getInstance();
       }
       await _sharedPreferences!.setString('auth_token', token);
     } else {
-      // For mobile, use secure storage
       await _secureStorage.write(key: 'auth_token', value: token);
     }
   }
 
-  // Store token method (public version of _saveToken)
   static Future<void> storeToken(String token) async {
     await _saveToken(token);
   }
 
-  // Clear token from storage
   static Future<void> clearToken() async {
     _token = null;
     
     if (kIsWeb) {
-      // For web, use shared_preferences
       if (_sharedPreferences == null) {
         _sharedPreferences = await SharedPreferences.getInstance();
       }
       await _sharedPreferences!.remove('auth_token');
     } else {
-      // For mobile, use secure storage
       await _secureStorage.delete(key: 'auth_token');
     }
   }
 
-  // Get headers with authorization token
   static Future<Map<String, String>> getAuthHeaders() async {
-    // Ensure token is loaded from storage
     if (_token == null) {
       await initializeToken();
     }
@@ -86,21 +73,16 @@ class AuthService {
     };
   }
 
-  // Check network connectivity
   static Future<bool> _checkNetwork() async {
     try {
-      if (kIsWeb) {
-        return true;
-      } else {
-        final connectivityResult = await Connectivity().checkConnectivity();
-        return connectivityResult != ConnectivityResult.none;
-      }
+      if (kIsWeb) return true;
+      final connectivityResult = await Connectivity().checkConnectivity();
+      return connectivityResult != ConnectivityResult.none;
     } catch (e) {
       return false;
     }
   }
 
-  // Register with email/password
   static Future<Map<String, dynamic>> register({
     required String fullName,
     required String email,
@@ -129,6 +111,16 @@ class AuthService {
       final data = json.decode(response.body);
       
       if (response.statusCode == 201) {
+        if (data['requiresOtpVerification'] == true) {
+          return {
+            'success': true,
+            'message': data['message'] ?? 'OTP sent to your email',
+            'requiresOtpVerification': true,
+            'userId': data['userId']?.toString() ?? '',
+            'email': data['email']?.toString() ?? email,
+          };
+        }
+        
         if (data['token'] != null) {
           await _saveToken(data['token']);
         }
@@ -158,12 +150,11 @@ class AuthService {
     } catch (e) {
       return {
         'success': false,
-        'message': 'Connection error: $e',
+        'message': 'Connection error',
       };
     }
   }
 
-  // Login with email/password
   static Future<Map<String, dynamic>> login({
     required String email,
     required String password,
@@ -188,7 +179,16 @@ class AuthService {
       final data = json.decode(response.body);
       
       if (response.statusCode == 200) {
-        // Always save token to storage
+        if (data['requiresOtpVerification'] == true) {
+          return {
+            'success': true,
+            'message': data['message'] ?? 'OTP sent to your email',
+            'requiresOtpVerification': true,
+            'userId': data['userId']?.toString() ?? '',
+            'email': data['email']?.toString() ?? email,
+          };
+        }
+        
         await _saveToken(data['token']);
         
         return {
@@ -215,12 +215,119 @@ class AuthService {
     } catch (e) {
       return {
         'success': false,
-        'message': 'Connection error: $e',
+        'message': 'Connection error',
       };
     }
   }
 
-  // Google OAuth login with user existence check
+  static Future<Map<String, dynamic>> verifyLoginOTP({
+    required String userId,
+    required String otp,
+  }) async {
+    if (!await _checkNetwork()) {
+      return {
+        'success': false,
+        'message': 'No internet connection',
+      };
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/verify-login-otp'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'userId': userId,
+          'otp': otp,
+        }),
+      );
+
+      final data = json.decode(response.body);
+      
+      if (response.statusCode == 200) {
+        if (data['token'] != null) {
+          await _saveToken(data['token']);
+        }
+        
+        return {
+          'success': true,
+          'message': data['message'],
+          'token': data['token'],
+          'user': data['user'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'OTP verification failed',
+        };
+      }
+    } on SocketException catch (_) {
+      return {
+        'success': false,
+        'message': 'No internet connection. Please check your network.',
+      };
+    } on http.ClientException catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.message}',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Connection error',
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> resendLoginOTP({
+    required String userId,
+  }) async {
+    if (!await _checkNetwork()) {
+      return {
+        'success': false,
+        'message': 'No internet connection',
+      };
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/resend-login-otp'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'userId': userId,
+        }),
+      );
+
+      final data = json.decode(response.body);
+      
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': data['message'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to resend OTP',
+        };
+      }
+    } on SocketException catch (_) {
+      return {
+        'success': false,
+        'message': 'No internet connection. Please check your network.',
+      };
+    } on http.ClientException catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.message}',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Connection error',
+      };
+    }
+  }
+
   static Future<Map<String, dynamic>> googleLogin({
     String? idToken,
     String? accessToken,
@@ -236,13 +343,8 @@ class AuthService {
     try {
       Map<String, dynamic> requestBody = {};
       
-      if (idToken != null) {
-        requestBody['token'] = idToken;
-      }
-      
-      if (accessToken != null) {
-        requestBody['accessToken'] = accessToken;
-      }
+      if (idToken != null) requestBody['token'] = idToken;
+      if (accessToken != null) requestBody['accessToken'] = accessToken;
       
       if (requestBody.isEmpty) {
         return {
@@ -294,12 +396,11 @@ class AuthService {
     } catch (e) {
       return {
         'success': false,
-        'message': 'Connection error: $e',
+        'message': 'Connection error',
       };
     }
   }
 
-  // Send OTP for password reset
   static Future<Map<String, dynamic>> sendResetOTP({
     required String email,
   }) async {
@@ -314,9 +415,7 @@ class AuthService {
       final response = await http.post(
         Uri.parse('$baseUrl/forgot-password'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'email': email,
-        }),
+        body: json.encode({'email': email}),
       );
 
       final data = json.decode(response.body);
@@ -345,12 +444,11 @@ class AuthService {
     } catch (e) {
       return {
         'success': false,
-        'message': 'Connection error: $e',
+        'message': 'Connection error',
       };
     }
   }
 
-  // Verify OTP
   static Future<Map<String, dynamic>> verifyOTP({
     required String email,
     required String otp,
@@ -366,10 +464,7 @@ class AuthService {
       final response = await http.post(
         Uri.parse('$baseUrl/verify-otp'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'email': email,
-          'otp': otp,
-        }),
+        body: json.encode({'email': email, 'otp': otp}),
       );
 
       final data = json.decode(response.body);
@@ -398,12 +493,11 @@ class AuthService {
     } catch (e) {
       return {
         'success': false,
-        'message': 'Connection error: $e',
+        'message': 'Connection error',
       };
     }
   }
 
-  // Reset password with OTP
   static Future<Map<String, dynamic>> resetPassword({
     required String email,
     required String otp,
@@ -455,24 +549,21 @@ class AuthService {
     } catch (e) {
       return {
         'success': false,
-        'message': 'Connection error: $e',
+        'message': 'Connection error',
       };
     }
   }
 
-  // Check if user is logged in
   static Future<bool> isLoggedIn() async {
     await initializeToken();
     return _token != null && _token!.isNotEmpty;
   }
 
-  // Get stored token
   static Future<String?> getStoredToken() async {
     await initializeToken();
     return _token;
   }
 
-  // Get user ID from token
   static Future<String?> getUserId() async {
     final token = await getStoredToken();
     if (token == null) return null;
@@ -492,7 +583,6 @@ class AuthService {
     }
   }
 
-  // Get user email from token
   static Future<String?> getUserEmail() async {
     final token = await getStoredToken();
     if (token == null) return null;
@@ -512,10 +602,8 @@ class AuthService {
     }
   }
 
-  // Logout method that also clears token
   static Future<void> logout() async {
     try {
-      // Call backend logout endpoint if needed
       final token = await getStoredToken();
       if (token != null) {
         try {
@@ -526,23 +614,18 @@ class AuthService {
               'Authorization': 'Bearer $token',
             },
           );
-        } catch (e) {
-          // Silently fail if logout API call fails
-        }
+        } catch (e) {}
       }
     } finally {
-      // Always clear the token locally
       await clearToken();
     }
   }
 
-  // Check token validity
   static Future<bool> isTokenValid() async {
     final token = await getStoredToken();
     if (token == null || token.isEmpty) return false;
     
     try {
-      // Check if token is expired
       final parts = token.split('.');
       if (parts.length != 3) return false;
       
@@ -555,31 +638,24 @@ class AuthService {
       if (exp == null) return false;
       
       final expiryTime = DateTime.fromMillisecondsSinceEpoch(exp * 1000);
-      final currentTime = DateTime.now();
-      
-      // Token is valid if it hasn't expired yet
-      return currentTime.isBefore(expiryTime);
+      return DateTime.now().isBefore(expiryTime);
     } catch (e) {
       return false;
     }
   }
 
-  // Clear all authentication data
   static Future<void> clearAllAuthData() async {
     await clearToken();
-    
     if (kIsWeb && _sharedPreferences != null) {
       await _sharedPreferences!.remove('user_email');
       await _sharedPreferences!.remove('user_name');
     }
   }
 
-  // Initialize the service (call this early in your app)
   static Future<void> initialize() async {
     await initializeToken();
   }
 
-  // Get authentication status with validity check
   static Future<Map<String, dynamic>> getAuthStatus() async {
     final hasToken = await isLoggedIn();
     final tokenValid = await isTokenValid();
@@ -591,20 +667,14 @@ class AuthService {
     };
   }
 
-  // Create headers for multipart requests (for file uploads)
   static Future<Map<String, String>> getMultipartHeaders() async {
     final token = await getStoredToken();
-    
     if (token == null) {
       throw Exception('No authentication token found');
     }
-    
-    return {
-      'Authorization': 'Bearer $token',
-    };
+    return {'Authorization': 'Bearer $token'};
   }
 
-  // Check if user exists via Google (for registration flow)
   static Future<Map<String, dynamic>> checkGoogleUserExists({
     String? idToken,
     String? accessToken,
@@ -616,7 +686,6 @@ class AuthService {
     );
   }
 
-  // Check if current user has password
   static Future<Map<String, dynamic>> hasPassword() async {
     try {
       final headers = await getAuthHeaders();
@@ -641,7 +710,7 @@ class AuthService {
     } catch (e) {
       return {
         'success': false,
-        'message': 'Connection error: $e',
+        'message': 'Connection error',
       };
     }
   }
