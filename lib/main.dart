@@ -5,12 +5,12 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'screens/loading_page.dart';
 import 'services/auth_service.dart';
-import 'services/notification_permission_service.dart';
 import 'providers/activity_provider.dart';
 import 'providers/gamification_provider.dart';
 import 'providers/dashboard_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/smart_reminder_provider.dart';
+import 'providers/meal_provider.dart'; // NEW
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -49,6 +49,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => DashboardProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => SmartReminderProvider()),
+        ChangeNotifierProvider(create: (_) => MealProvider()), // NEW
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,

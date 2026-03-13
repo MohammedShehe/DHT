@@ -1,13 +1,15 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'auth_service.dart';
 import '../utils/api_config.dart';
 import '../models/activity_models.dart';
+import '../models/meal_models.dart';
+import '../models/meal_request_models.dart';
 
 class ActivityService {
-  static String get baseUrl => '${ApiConfig.baseUrl}/activities';
+  static String get baseUrl => ApiConfig.baseUrl;
 
-  // Meals
   static Future<List<Meal>> getMeals(DateTime date) async {
     try {
       final headers = await AuthService.getAuthHeaders();
@@ -20,9 +22,11 @@ class ActivityService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return (data['meals'] as List)
-            .map((meal) => Meal.fromJson(meal))
-            .toList();
+        if (data['meals'] != null && data['meals'] is List) {
+          return (data['meals'] as List)
+              .map((meal) => Meal.fromJson(meal))
+              .toList();
+        }
       }
       return [];
     } catch (e) {
@@ -30,45 +34,100 @@ class ActivityService {
     }
   }
 
-  static Future<void> saveMeal(Meal meal) async {
-    final headers = await AuthService.getAuthHeaders();
-    final response = await http.post(
-      Uri.parse('$baseUrl/meals'),
-      headers: headers,
-      body: json.encode(meal.toJson()),
-    );
+  static Future<Map<String, dynamic>> saveMeal(CreateMealRequest request) async {
+    try {
+      final headers = await AuthService.getAuthHeaders();
+      
+      final response = await http.post(
+        Uri.parse('$baseUrl/meals'),
+        headers: headers,
+        body: json.encode(request.toJson()),
+      );
 
-    if (response.statusCode != 200 && response.statusCode != 201) {
-      throw Exception('Failed to save meal');
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final data = response.body.isNotEmpty ? json.decode(response.body) : {};
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Meal logged successfully',
+          'meal': data['meal'] != null ? Meal.fromJson(data['meal']) : null,
+        };
+      } else {
+        final data = response.body.isNotEmpty ? json.decode(response.body) : {};
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to save meal',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Connection error: $e',
+      };
     }
   }
 
-  static Future<void> updateMeal(Meal meal) async {
-    final headers = await AuthService.getAuthHeaders();
-    final response = await http.put(
-      Uri.parse('$baseUrl/meals/${meal.id}'),
-      headers: headers,
-      body: json.encode(meal.toJson()),
-    );
+  static Future<Map<String, dynamic>> updateMeal(int mealId, UpdateMealRequest request) async {
+    try {
+      final headers = await AuthService.getAuthHeaders();
+      
+      final response = await http.put(
+        Uri.parse('$baseUrl/meals/$mealId'),
+        headers: headers,
+        body: json.encode(request.toJson()),
+      );
 
-    if (response.statusCode != 200) {
-      throw Exception('Failed to update meal');
+      if (response.statusCode == 200) {
+        final data = response.body.isNotEmpty ? json.decode(response.body) : {};
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Meal updated successfully',
+          'meal': data['meal'] != null ? Meal.fromJson(data['meal']) : null,
+        };
+      } else {
+        final data = response.body.isNotEmpty ? json.decode(response.body) : {};
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to update meal',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Connection error: $e',
+      };
     }
   }
 
-  static Future<void> deleteMeal(String mealId) async {
-    final headers = await AuthService.getAuthHeaders();
-    final response = await http.delete(
-      Uri.parse('$baseUrl/meals/$mealId'),
-      headers: headers,
-    );
+  static Future<Map<String, dynamic>> deleteMeal(int mealId) async {
+    try {
+      final headers = await AuthService.getAuthHeaders();
+      
+      final response = await http.delete(
+        Uri.parse('$baseUrl/meals/$mealId'),
+        headers: headers,
+      );
 
-    if (response.statusCode != 200) {
-      throw Exception('Failed to delete meal');
+      if (response.statusCode == 200) {
+        final data = response.body.isNotEmpty ? json.decode(response.body) : {};
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Meal deleted successfully',
+        };
+      } else {
+        final data = response.body.isNotEmpty ? json.decode(response.body) : {};
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to delete meal',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Connection error: $e',
+      };
     }
   }
 
-  // Workouts
   static Future<List<Workout>> getWorkouts(DateTime date) async {
     try {
       final headers = await AuthService.getAuthHeaders();
@@ -129,7 +188,6 @@ class ActivityService {
     }
   }
 
-  // Sleep
   static Future<List<Sleep>> getSleep(DateTime date) async {
     try {
       final headers = await AuthService.getAuthHeaders();
@@ -190,14 +248,13 @@ class ActivityService {
     }
   }
 
-  // Hydration
   static Future<List<Hydration>> getHydration(DateTime date) async {
     try {
       final headers = await AuthService.getAuthHeaders();
       final formattedDate = date.toIso8601String().split('T')[0];
       
       final response = await http.get(
-        Uri.parse('$baseUrl/hydration?date=$formattedDate'),
+        Uri.parse('$baseUrl/water?date=$formattedDate'),
         headers: headers,
       );
 
@@ -216,9 +273,9 @@ class ActivityService {
   static Future<void> saveHydration(Hydration hydration) async {
     final headers = await AuthService.getAuthHeaders();
     final response = await http.post(
-      Uri.parse('$baseUrl/hydration'),
+      Uri.parse('$baseUrl/water/log'),
       headers: headers,
-      body: json.encode(hydration.toJson()),
+      body: json.encode({'glasses': hydration.amount ~/ 250}),
     );
 
     if (response.statusCode != 200 && response.statusCode != 201) {
@@ -229,9 +286,9 @@ class ActivityService {
   static Future<void> updateHydration(Hydration hydration) async {
     final headers = await AuthService.getAuthHeaders();
     final response = await http.put(
-      Uri.parse('$baseUrl/hydration/${hydration.id}'),
+      Uri.parse('$baseUrl/water/log/${hydration.id}'),
       headers: headers,
-      body: json.encode(hydration.toJson()),
+      body: json.encode({'glasses': hydration.amount ~/ 250}),
     );
 
     if (response.statusCode != 200) {
@@ -242,7 +299,7 @@ class ActivityService {
   static Future<void> deleteHydration(String hydrationId) async {
     final headers = await AuthService.getAuthHeaders();
     final response = await http.delete(
-      Uri.parse('$baseUrl/hydration/$hydrationId'),
+      Uri.parse('$baseUrl/water/log/$hydrationId'),
       headers: headers,
     );
 
@@ -251,7 +308,6 @@ class ActivityService {
     }
   }
 
-  // Medications
   static Future<List<Medication>> getMedications() async {
     try {
       final headers = await AuthService.getAuthHeaders();
@@ -346,14 +402,13 @@ class ActivityService {
     }
   }
 
-  // Weekly summaries
   static Future<Map<String, dynamic>> getWeeklySummary(DateTime startDate) async {
     try {
       final headers = await AuthService.getAuthHeaders();
       final formattedDate = startDate.toIso8601String().split('T')[0];
       
       final response = await http.get(
-        Uri.parse('$baseUrl/summary/weekly?start_date=$formattedDate'),
+        Uri.parse('$baseUrl/meals/summary/weekly?start_date=$formattedDate'),
         headers: headers,
       );
 

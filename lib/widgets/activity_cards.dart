@@ -1,5 +1,7 @@
+// lib/widgets/activity_cards.dart
 import 'package:flutter/material.dart';
 import '../models/activity_models.dart';
+import '../models/meal_models.dart';
 
 class ActivityCard extends StatelessWidget {
   final Widget child;
@@ -23,10 +25,13 @@ class ActivityCard extends StatelessWidget {
             width: 50,
             height: 50,
             decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.1),
+              color: _getMealColor(meal.mealType).withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.restaurant, color: Colors.orange),
+            child: Icon(
+              _getMealIcon(meal.mealType),
+              color: _getMealColor(meal.mealType),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -34,7 +39,7 @@ class ActivityCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  meal.type,
+                  meal.mealType,
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 16,
@@ -42,7 +47,7 @@ class ActivityCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${meal.calories} kcal • ${meal.time}',
+                  '${meal.totalCalories} kcal • ${meal.formattedTime}',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey[600],
@@ -50,7 +55,7 @@ class ActivityCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  meal.items,
+                  meal.itemsSummary,
                   style: TextStyle(
                     fontSize: 11,
                     color: Colors.grey[500],
@@ -168,6 +173,41 @@ class ActivityCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// Helper functions for meal colors and icons
+Color _getMealColor(String mealType) {
+  switch (mealType.toLowerCase()) {
+    case 'breakfast':
+      return Colors.orange;
+    case 'lunch':
+      return Colors.green;
+    case 'dinner':
+      return Colors.purple;
+    case 'snack':
+      return Colors.pink;
+    case 'brunch':
+      return Colors.teal;
+    default:
+      return Colors.blue;
+  }
+}
+
+IconData _getMealIcon(String mealType) {
+  switch (mealType.toLowerCase()) {
+    case 'breakfast':
+      return Icons.breakfast_dining;
+    case 'lunch':
+      return Icons.lunch_dining;
+    case 'dinner':
+      return Icons.dinner_dining;
+    case 'snack':
+      return Icons.cookie;
+    case 'brunch':
+      return Icons.brunch_dining;
+    default:
+      return Icons.restaurant;
   }
 }
 

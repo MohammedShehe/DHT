@@ -1,55 +1,6 @@
+// lib/models/activity_models.dart
 import 'package:flutter/material.dart';
-
-class Meal {
-  final String id;
-  final String type;
-  final int calories;
-  final String time;
-  final String items;
-  final double? protein;
-  final double? carbs;
-  final double? fat;
-  final String? photoUrl;
-
-  Meal({
-    required this.id,
-    required this.type,
-    required this.calories,
-    required this.time,
-    required this.items,
-    this.protein,
-    this.carbs,
-    this.fat,
-    this.photoUrl,
-  });
-
-  factory Meal.fromJson(Map<String, dynamic> json) {
-    return Meal(
-      id: json['id'].toString(),
-      type: json['type'] ?? '',
-      calories: json['calories'] ?? 0,
-      time: json['time'] ?? '',
-      items: json['items'] ?? '',
-      protein: json['protein']?.toDouble(),
-      carbs: json['carbs']?.toDouble(),
-      fat: json['fat']?.toDouble(),
-      photoUrl: json['photo_url'],
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'type': type,
-      'calories': calories,
-      'time': time,
-      'items': items,
-      'protein': protein,
-      'carbs': carbs,
-      'fat': fat,
-      'photo_url': photoUrl,
-    };
-  }
-}
+import 'meal_models.dart'; // Import the new Meal class
 
 class Workout {
   final String id;

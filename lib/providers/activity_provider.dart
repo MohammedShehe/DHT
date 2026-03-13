@@ -1,6 +1,7 @@
-// lib/providers/activity_provider.dart
 import 'package:flutter/material.dart';
 import '../models/activity_models.dart';
+import '../models/meal_models.dart';
+import '../models/meal_request_models.dart';
 import '../services/activity_service.dart';
 
 class ActivityProvider extends ChangeNotifier {
@@ -13,16 +14,13 @@ class ActivityProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
 
-  // Weekly data for charts
   List<double> _weeklyCalories = [0, 0, 0, 0, 0, 0, 0];
   List<double> _weeklyWorkoutMinutes = [0, 0, 0, 0, 0, 0, 0];
   List<double> _weeklySleepHours = [0, 0, 0, 0, 0, 0, 0];
   List<double> _weeklyHydration = [0, 0, 0, 0, 0, 0, 0];
 
-  // Callback for showing messages (to be set from UI)
   Function(String message, {bool isError})? onShowMessage;
 
-  // Getters
   List<Meal> get meals => _meals;
   List<Workout> get workouts => _workouts;
   List<Sleep> get sleep => _sleep;
@@ -32,28 +30,23 @@ class ActivityProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
   
-  // Weekly data getters
   List<double> get weeklyCalories => _weeklyCalories;
   List<double> get weeklyWorkoutMinutes => _weeklyWorkoutMinutes;
   List<double> get weeklySleepHours => _weeklySleepHours;
   List<double> get weeklyHydration => _weeklyHydration;
 
-  // Nutrition summary
-  int get totalCalories => _meals.fold(0, (sum, meal) => sum + meal.calories);
-  double get totalProtein => _meals.fold(0, (sum, meal) => sum + (meal.protein ?? 0));
-  double get totalCarbs => _meals.fold(0, (sum, meal) => sum + (meal.carbs ?? 0));
-  double get totalFat => _meals.fold(0, (sum, meal) => sum + (meal.fat ?? 0));
+  int get totalCalories => _meals.fold(0, (sum, meal) => sum + meal.totalCalories);
+  double get totalProtein => _meals.fold(0, (sum, meal) => sum + meal.totalProtein);
+  double get totalCarbs => _meals.fold(0, (sum, meal) => sum + meal.totalCarbs);
+  double get totalFat => _meals.fold(0, (sum, meal) => sum + meal.totalFat);
   
-  // Workout summary
   int get totalWorkoutMinutes => _workouts.fold(0, (sum, workout) => sum + workout.duration);
   int get totalCaloriesBurned => _workouts.fold(0, (sum, workout) => sum + workout.calories);
   
-  // Sleep summary
   double get totalSleepHours => _sleep.fold(0, (sum, sleep) => sum + sleep.duration);
 
-  // Hydration summary
   int get totalWaterIntake => _hydration.fold(0, (sum, entry) => sum + entry.amount);
-  int get waterGlasses => (totalWaterIntake / 250).round(); // Standard glass = 250ml
+  int get waterGlasses => (totalWaterIntake / 250).round();
 
   void setSelectedDate(DateTime date) {
     _selectedDate = date;
@@ -67,32 +60,27 @@ class ActivityProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Load data from service with individual error handling
       try {
         _meals = await ActivityService.getMeals(_selectedDate);
       } catch (e) {
-        debugPrint('Error loading meals: $e');
         _meals = [];
       }
       
       try {
         _workouts = await ActivityService.getWorkouts(_selectedDate);
       } catch (e) {
-        debugPrint('Error loading workouts: $e');
         _workouts = [];
       }
       
       try {
         _sleep = await ActivityService.getSleep(_selectedDate);
       } catch (e) {
-        debugPrint('Error loading sleep: $e');
         _sleep = [];
       }
       
       try {
         _hydration = await ActivityService.getHydration(_selectedDate);
       } catch (e) {
-        debugPrint('Error loading hydration: $e');
         _hydration = [];
       }
       
@@ -102,16 +90,13 @@ class ActivityProvider extends ChangeNotifier {
           return med.scheduledTimes.isNotEmpty;
         }).toList();
       } catch (e) {
-        debugPrint('Error loading medications: $e');
         _medications = [];
       }
 
-      // Load weekly summary
       await _loadWeeklySummary();
       
     } catch (e) {
       _error = e.toString();
-      debugPrint('Error loading activity data: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -130,8 +115,6 @@ class ActivityProvider extends ChangeNotifier {
         _weeklyHydration = List<double>.from(summary['hydration'] ?? [0, 0, 0, 0, 0, 0, 0]);
       }
     } catch (e) {
-      debugPrint('Error loading weekly summary: $e');
-      // Initialize with zeros if error occurs
       _weeklyCalories = [0, 0, 0, 0, 0, 0, 0];
       _weeklyWorkoutMinutes = [0, 0, 0, 0, 0, 0, 0];
       _weeklySleepHours = [0, 0, 0, 0, 0, 0, 0];
@@ -139,41 +122,50 @@ class ActivityProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> addMeal(Meal meal) async {
+  Future<void> addMeal(CreateMealRequest request) async {
     try {
-      await ActivityService.saveMeal(meal);
-      await loadActivityData();
-      _showMessage('Meal added successfully');
+      final result = await ActivityService.saveMeal(request);
+      if (result['success']) {
+        await loadActivityData();
+        _showMessage(result['message'] ?? 'Meal added successfully');
+      } else {
+        _showMessage(result['message'] ?? 'Error adding meal', isError: true);
+      }
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error adding meal: $e');
       _showMessage('Error adding meal: $e', isError: true);
     }
   }
 
-  Future<void> updateMeal(Meal meal) async {
+  Future<void> updateMeal(int mealId, UpdateMealRequest request) async {
     try {
-      await ActivityService.updateMeal(meal);
-      await loadActivityData();
-      _showMessage('Meal updated successfully');
+      final result = await ActivityService.updateMeal(mealId, request);
+      if (result['success']) {
+        await loadActivityData();
+        _showMessage(result['message'] ?? 'Meal updated successfully');
+      } else {
+        _showMessage(result['message'] ?? 'Error updating meal', isError: true);
+      }
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error updating meal: $e');
       _showMessage('Error updating meal: $e', isError: true);
     }
   }
 
-  Future<void> deleteMeal(String mealId) async {
+  Future<void> deleteMeal(int mealId) async {
     try {
-      await ActivityService.deleteMeal(mealId);
-      await loadActivityData();
-      _showMessage('Meal deleted successfully');
+      final result = await ActivityService.deleteMeal(mealId);
+      if (result['success']) {
+        await loadActivityData();
+        _showMessage(result['message'] ?? 'Meal deleted successfully');
+      } else {
+        _showMessage(result['message'] ?? 'Error deleting meal', isError: true);
+      }
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error deleting meal: $e');
       _showMessage('Error deleting meal: $e', isError: true);
     }
   }
@@ -186,7 +178,6 @@ class ActivityProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error adding workout: $e');
       _showMessage('Error adding workout: $e', isError: true);
     }
   }
@@ -199,7 +190,6 @@ class ActivityProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error updating workout: $e');
       _showMessage('Error updating workout: $e', isError: true);
     }
   }
@@ -212,7 +202,6 @@ class ActivityProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error deleting workout: $e');
       _showMessage('Error deleting workout: $e', isError: true);
     }
   }
@@ -225,7 +214,6 @@ class ActivityProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error adding sleep: $e');
       _showMessage('Error adding sleep: $e', isError: true);
     }
   }
@@ -238,7 +226,6 @@ class ActivityProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error updating sleep: $e');
       _showMessage('Error updating sleep: $e', isError: true);
     }
   }
@@ -251,12 +238,10 @@ class ActivityProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error deleting sleep: $e');
       _showMessage('Error deleting sleep: $e', isError: true);
     }
   }
 
-  // Hydration methods
   Future<void> addHydration(Hydration hydration) async {
     try {
       await ActivityService.saveHydration(hydration);
@@ -265,7 +250,6 @@ class ActivityProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error adding hydration: $e');
       _showMessage('Error adding hydration: $e', isError: true);
     }
   }
@@ -278,7 +262,6 @@ class ActivityProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error updating hydration: $e');
       _showMessage('Error updating hydration: $e', isError: true);
     }
   }
@@ -291,23 +274,19 @@ class ActivityProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error deleting hydration: $e');
       _showMessage('Error deleting hydration: $e', isError: true);
     }
   }
 
-  // Medication methods with improved error handling
   Future<void> addMedication(dynamic medicationData) async {
     try {
       Medication medication;
       
       if (medicationData is Map<String, dynamic>) {
-        // Convert times to scheduled_times if needed
         if (medicationData.containsKey('times') && !medicationData.containsKey('scheduled_times')) {
           medicationData['scheduled_times'] = medicationData['times'];
         }
         
-        // Ensure required fields exist
         if (!medicationData.containsKey('scheduled_times')) {
           medicationData['scheduled_times'] = [];
         }
@@ -332,7 +311,6 @@ class ActivityProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error adding medication: $e');
       _showMessage('Error adding medication: $e', isError: true);
     }
   }
@@ -345,7 +323,6 @@ class ActivityProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error updating medication: $e');
       _showMessage('Error updating medication: $e', isError: true);
     }
   }
@@ -358,7 +335,6 @@ class ActivityProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error deleting medication: $e');
       _showMessage('Error deleting medication: $e', isError: true);
     }
   }
@@ -371,27 +347,22 @@ class ActivityProvider extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      debugPrint('Error marking medication taken: $e');
       _showMessage('Error updating medication status: $e', isError: true);
     }
   }
 
-  // Helper method to show messages via callback
   void _showMessage(String message, {bool isError = false}) {
     if (onShowMessage != null) {
       onShowMessage!(message, isError: isError);
     }
   }
 
-  // Helper method to get medications for a specific date
   List<Medication> getMedicationsForDate(DateTime date) {
     try {
       return _medications.where((med) {
-        // Check if medication is active on this date
         if (med.startDate.isAfter(date)) return false;
         if (med.endDate != null && med.endDate!.isBefore(date)) return false;
         
-        // Check if there are scheduled times for this date
         return med.scheduledTimes.any((time) {
           return time.year == date.year &&
                  time.month == date.month &&
@@ -399,12 +370,10 @@ class ActivityProvider extends ChangeNotifier {
         });
       }).toList();
     } catch (e) {
-      debugPrint('Error filtering medications for date: $e');
       return [];
     }
   }
 
-  // Helper method to get today's adherence
   double getTodaysAdherence() {
     try {
       final today = DateTime.now();
@@ -432,12 +401,10 @@ class ActivityProvider extends ChangeNotifier {
       if (totalDoses == 0) return 100.0;
       return (takenDoses / totalDoses) * 100;
     } catch (e) {
-      debugPrint('Error calculating adherence: $e');
       return 0.0;
     }
   }
 
-  // Clean up callback
   void disposeCallbacks() {
     onShowMessage = null;
   }

@@ -1,10 +1,12 @@
-// lib/screens/activity_tab.dart
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/activity_models.dart';
+import '../models/meal_models.dart';
+import '../models/meal_request_models.dart';
 import '../providers/activity_provider.dart';
+import '../providers/meal_provider.dart';
 import '../widgets/date_selector.dart';
 import '../widgets/progress_chart.dart';
 import '../widgets/activity_cards.dart';
@@ -30,7 +32,6 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
     
-    // Set up message callback for the provider
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<ActivityProvider>(context, listen: false);
       provider.onShowMessage = (String message, {bool isError = false}) {
@@ -45,20 +46,16 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
         }
       };
       
-      // Load initial data
       provider.loadActivityData();
     });
   }
 
   @override
   void dispose() {
-    // Clean up the callback
     try {
       final provider = Provider.of<ActivityProvider>(context, listen: false);
       provider.disposeCallbacks();
-    } catch (e) {
-      // Provider might not be available during dispose
-    }
+    } catch (e) {}
     _tabController.dispose();
     super.dispose();
   }
@@ -213,7 +210,10 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    MealsTab(provider: provider),
+                    MealsTab(
+                      activityProvider: provider,
+                      mealProvider: Provider.of<MealProvider>(context),
+                    ),
                     WorkoutsTab(provider: provider),
                     SleepTab(provider: provider),
                     HydrationTab(provider: provider),
@@ -253,11 +253,15 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
   }
 }
 
-// Individual Tab Widgets
 class MealsTab extends StatelessWidget {
-  final ActivityProvider provider;
+  final ActivityProvider activityProvider;
+  final MealProvider mealProvider;
 
-  const MealsTab({super.key, required this.provider});
+  const MealsTab({
+    super.key,
+    required this.activityProvider,
+    required this.mealProvider,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -275,19 +279,34 @@ class MealsTab extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Calorie Intake',
+                    'Daily Nutrition',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    '${provider.totalCalories} / 2200 kcal',
-                    style: const TextStyle(fontSize: 14, color: Colors.grey),
-                  ),
+                  if (mealProvider.todaysSummary != null) ...[
+                    Text(
+                      '${mealProvider.todaysSummary!.totalCalories} / 2200 kcal',
+                      style: const TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 16),
+                    LinearProgressIndicator(
+                      value: (mealProvider.todaysSummary!.totalCalories / 2200).clamp(0.0, 1.0),
+                      backgroundColor: Colors.orange.withOpacity(0.2),
+                      color: Colors.orange,
+                      borderRadius: BorderRadius.circular(4),
+                      minHeight: 8,
+                    ),
+                  ] else ...[
+                    const Text(
+                      '0 / 2200 kcal',
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   SizedBox(
                     height: 200,
                     child: ProgressChart.bar(
-                      data: provider.weeklyCalories,
+                      data: activityProvider.weeklyCalories,
                       labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
                       color: Colors.orange,
                       title: 'Weekly Calories',
@@ -317,7 +336,7 @@ class MealsTab extends StatelessWidget {
                       Expanded(
                         child: _buildNutrientCard(
                           'Protein',
-                          '${provider.totalProtein.toStringAsFixed(0)}g',
+                          '${mealProvider.todaysSummary?.totalProtein.toStringAsFixed(0) ?? '0'}g',
                           150,
                           Colors.blue,
                         ),
@@ -325,7 +344,7 @@ class MealsTab extends StatelessWidget {
                       Expanded(
                         child: _buildNutrientCard(
                           'Carbs',
-                          '${provider.totalCarbs.toStringAsFixed(0)}g',
+                          '${mealProvider.todaysSummary?.totalCarbs.toStringAsFixed(0) ?? '0'}g',
                           300,
                           Colors.green,
                         ),
@@ -333,7 +352,7 @@ class MealsTab extends StatelessWidget {
                       Expanded(
                         child: _buildNutrientCard(
                           'Fat',
-                          '${provider.totalFat.toStringAsFixed(0)}g',
+                          '${mealProvider.todaysSummary?.totalFat.toStringAsFixed(0) ?? '0'}g',
                           70,
                           Colors.orange,
                         ),
@@ -373,7 +392,7 @@ class MealsTab extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${provider.waterGlasses} / 8 glasses',
+                          '${activityProvider.waterGlasses} / 8 glasses',
                           style: TextStyle(color: Colors.grey[600]),
                         ),
                       ],
@@ -385,13 +404,22 @@ class MealsTab extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          const Text(
-            "Today's Meals",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                "Today's Meals",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              Text(
+                '${mealProvider.todaysMeals.length} meals',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
-          
-          if (provider.meals.isEmpty)
+
+          if (mealProvider.todaysMeals.isEmpty)
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
@@ -403,15 +431,17 @@ class MealsTab extends StatelessWidget {
                       'No meals logged today',
                       style: TextStyle(color: Colors.grey[600]),
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Tap + to log your first meal',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    ),
                   ],
                 ),
               ),
             )
           else
-            ...provider.meals.map((meal) => ActivityCard.meal(
-              meal: meal,
-              onTap: () => _showMealDetails(context, meal),
-            )).toList(),
+            ...mealProvider.todaysMeals.map((meal) => _buildMealCard(context, meal)).toList(),
         ],
       ),
     );
@@ -459,13 +489,368 @@ class MealsTab extends StatelessWidget {
     );
   }
 
+  Widget _buildMealCard(BuildContext context, Meal meal) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        onTap: () => _showMealDetails(context, meal),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: _getMealColor(meal.mealType).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      _getMealIcon(meal.mealType),
+                      color: _getMealColor(meal.mealType),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          meal.mealType,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          meal.formattedTime,
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${meal.totalCalories} kcal',
+                      style: const TextStyle(
+                        color: Colors.orange,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+              Text(
+                meal.itemsSummary,
+                style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _buildMacroPill('P: ${meal.totalProtein.toStringAsFixed(1)}g', Colors.blue),
+                  const SizedBox(width: 8),
+                  _buildMacroPill('C: ${meal.totalCarbs.toStringAsFixed(1)}g', Colors.green),
+                  const SizedBox(width: 8),
+                  _buildMacroPill('F: ${meal.totalFat.toStringAsFixed(1)}g', Colors.orange),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMacroPill(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w500),
+      ),
+    );
+  }
+
   void _showMealDetails(BuildContext context, Meal meal) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => MealDetailsSheet(meal: meal),
+      builder: (context) => _MealDetailsSheet(meal: meal),
+    );
+  }
+
+  Color _getMealColor(String mealType) {
+    switch (mealType.toLowerCase()) {
+      case 'breakfast':
+        return Colors.orange;
+      case 'lunch':
+        return Colors.green;
+      case 'dinner':
+        return Colors.purple;
+      case 'snack':
+        return Colors.pink;
+      case 'brunch':
+        return Colors.teal;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  IconData _getMealIcon(String mealType) {
+    switch (mealType.toLowerCase()) {
+      case 'breakfast':
+        return Icons.breakfast_dining;
+      case 'lunch':
+        return Icons.lunch_dining;
+      case 'dinner':
+        return Icons.dinner_dining;
+      case 'snack':
+        return Icons.cookie;
+      case 'brunch':
+        return Icons.brunch_dining;
+      default:
+        return Icons.restaurant;
+    }
+  }
+}
+
+class _MealDetailsSheet extends StatelessWidget {
+  final Meal meal;
+
+  const _MealDetailsSheet({required this.meal});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: _getMealColor(meal.mealType).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  _getMealIcon(meal.mealType),
+                  color: _getMealColor(meal.mealType),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      meal.mealType,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      DateFormat('EEEE, MMMM d, yyyy · h:mm a').format(meal.mealTime),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Total Calories', style: TextStyle(fontWeight: FontWeight.w600)),
+                    Text(
+                      '${meal.totalCalories} kcal',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildDetailNutrient('Protein', '${meal.totalProtein.toStringAsFixed(1)}g', Colors.blue),
+                    _buildDetailNutrient('Carbs', '${meal.totalCarbs.toStringAsFixed(1)}g', Colors.green),
+                    _buildDetailNutrient('Fat', '${meal.totalFat.toStringAsFixed(1)}g', Colors.orange),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          const Text(
+            'Food Items',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
+
+          ...meal.items.map((item) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.restaurant, size: 18, color: Colors.grey),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.customFoodName ?? item.foodName ?? 'Unknown',
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      Text(
+                        '${item.quantity.toStringAsFixed(1)} ${item.servingUnit}',
+                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '${item.calories} kcal',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          )).toList(),
+
+          const SizedBox(height: 20),
+
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00C853),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              child: const Text('Close'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getMealColor(String mealType) {
+    switch (mealType.toLowerCase()) {
+      case 'breakfast':
+        return Colors.orange;
+      case 'lunch':
+        return Colors.green;
+      case 'dinner':
+        return Colors.purple;
+      case 'snack':
+        return Colors.pink;
+      case 'brunch':
+        return Colors.teal;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  IconData _getMealIcon(String mealType) {
+    switch (mealType.toLowerCase()) {
+      case 'breakfast':
+        return Icons.breakfast_dining;
+      case 'lunch':
+        return Icons.lunch_dining;
+      case 'dinner':
+        return Icons.dinner_dining;
+      case 'snack':
+        return Icons.cookie;
+      case 'brunch':
+        return Icons.brunch_dining;
+      default:
+        return Icons.restaurant;
+    }
+  }
+
+  Widget _buildDetailNutrient(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+        ),
+      ],
     );
   }
 }
@@ -876,7 +1261,7 @@ class HydrationTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final goalAmount = 2500; // 8 glasses * 250ml
+    final goalAmount = 2500;
     
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -919,7 +1304,6 @@ class HydrationTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Progress circle
                   Center(
                     child: Stack(
                       alignment: Alignment.center,
@@ -946,7 +1330,7 @@ class HydrationTab extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              'of ${goalAmount}ml', // Fixed: Use goalAmount variable directly
+                              'of ${goalAmount}ml',
                               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                             ),
                           ],
@@ -961,7 +1345,6 @@ class HydrationTab extends StatelessWidget {
           
           const SizedBox(height: 16),
           
-          // Weekly chart
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -991,7 +1374,6 @@ class HydrationTab extends StatelessWidget {
           
           const SizedBox(height: 16),
           
-          // Today's entries
           const Text(
             "Today's Entries",
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
@@ -1077,7 +1459,6 @@ class MedicationsTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Summary card
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1129,7 +1510,6 @@ class MedicationsTab extends StatelessWidget {
           
           const SizedBox(height: 16),
           
-          // Active medications
           const Text(
             'Today\'s Medications',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
@@ -1182,7 +1562,6 @@ class MedicationsTab extends StatelessWidget {
         ? Color(int.parse(medication.color!.replaceFirst('#', '0xff')))
         : Colors.purple;
     
-    // Filter times for today only
     final today = DateTime.now();
     final todayTimes = <int, DateTime>{};
     for (int i = 0; i < medication.scheduledTimes.length; i++) {
@@ -1251,7 +1630,6 @@ class MedicationsTab extends StatelessWidget {
             
             const SizedBox(height: 16),
             
-            // Instructions
             if (medication.instructions != null) ...[
               Container(
                 padding: const EdgeInsets.all(12),
@@ -1275,7 +1653,6 @@ class MedicationsTab extends StatelessWidget {
               const SizedBox(height: 12),
             ],
             
-            // Doses
             const Text(
               "Today's Doses",
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
@@ -1346,133 +1723,6 @@ class MedicationsTab extends StatelessWidget {
               ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// Bottom Sheets
-class MealDetailsSheet extends StatelessWidget {
-  final Meal meal;
-
-  const MealDetailsSheet({super.key, required this.meal});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF00C853).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.restaurant, color: Color(0xFF00C853)),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      meal.type,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      meal.time,
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          
-          const Text(
-            'Nutrition Facts',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 12),
-          
-          _buildNutrientDetailRow('Calories', '${meal.calories} kcal', Colors.orange),
-          if (meal.protein != null)
-            _buildNutrientDetailRow('Protein', '${meal.protein}g', Colors.blue),
-          if (meal.carbs != null)
-            _buildNutrientDetailRow('Carbohydrates', '${meal.carbs}g', Colors.green),
-          if (meal.fat != null)
-            _buildNutrientDetailRow('Fat', '${meal.fat}g', Colors.red),
-          
-          const SizedBox(height: 20),
-          const Divider(),
-          const SizedBox(height: 12),
-          
-          const Text(
-            'Food Items',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            meal.items,
-            style: const TextStyle(fontSize: 14),
-          ),
-          
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Close'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNutrientDetailRow(String label, String value, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Container(
-            width: 24,
-            height: 24,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Icon(
-              label == 'Calories' ? Icons.local_fire_department :
-              label == 'Protein' ? Icons.fitness_center :
-              label == 'Carbohydrates' ? Icons.energy_savings_leaf :
-              Icons.oil_barrel,
-              size: 14,
-              color: color,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-          ),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-        ],
       ),
     );
   }

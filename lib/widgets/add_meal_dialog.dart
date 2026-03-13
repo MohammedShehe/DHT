@@ -1,10 +1,9 @@
-// lib/widgets/add_meal_dialog.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../models/activity_models.dart';
-import '../models/food_model.dart';
-import '../providers/activity_provider.dart';
+import '../models/meal_models.dart';
+import '../models/meal_request_models.dart';
+import '../providers/meal_provider.dart';
 import 'food_selection_widget.dart';
 import 'custom_food_dialog.dart';
 
@@ -23,7 +22,7 @@ class _AddMealDialogState extends State<AddMealDialog> {
   String _mealType = 'Breakfast';
   TimeOfDay _selectedTime = TimeOfDay.now();
   
-  List<LoggedFood> _selectedFoods = [];
+  List<MealItemInput> _selectedItems = [];
   bool _showFoodSelector = false;
 
   final List<String> _mealTypes = [
@@ -43,99 +42,90 @@ class _AddMealDialogState extends State<AddMealDialog> {
   }
 
   void _addFood(FoodItem food, double quantity, String unit) {
-    final loggedFood = LoggedFood(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      food: food,
-      quantity: quantity,
-      servingUnit: unit,
-      time: DateTime.now(),
-      mealType: _mealType,
-    );
-    
+    final item = MealItemInput.fromFood(food, quantity, unit);
     setState(() {
-      _selectedFoods.add(loggedFood);
+      _selectedItems.add(item);
       _showFoodSelector = false;
     });
   }
 
-  void _removeFood(String id) {
+  void _addCustomFood(String name, int calories, double protein, double carbs, double fat, double quantity, String unit) {
+    final item = MealItemInput.custom(
+      customFoodName: name,
+      quantity: quantity,
+      servingUnit: unit,
+      customCalories: calories,
+      customProtein: protein,
+      customCarbs: carbs,
+      customFat: fat,
+    );
     setState(() {
-      _selectedFoods.removeWhere((f) => f.id == id);
+      _selectedItems.add(item);
+    });
+  }
+
+  void _removeItem(int index) {
+    setState(() {
+      _selectedItems.removeAt(index);
     });
   }
 
   int get _totalCalories {
-    int total = 0;
-    for (var food in _selectedFoods) {
-      total += food.calories;
-    }
-    return total;
+    return _selectedItems.fold(0, (sum, item) => sum + item.calories);
   }
 
   double get _totalProtein {
-    double total = 0.0;
-    for (var food in _selectedFoods) {
-      total += food.protein;
-    }
-    return total;
+    return _selectedItems.fold(0.0, (sum, item) => sum + item.protein);
   }
 
   double get _totalCarbs {
-    double total = 0.0;
-    for (var food in _selectedFoods) {
-      total += food.carbs;
-    }
-    return total;
+    return _selectedItems.fold(0.0, (sum, item) => sum + item.carbs);
   }
 
   double get _totalFat {
-    double total = 0.0;
-    for (var food in _selectedFoods) {
-      total += food.fat;
-    }
-    return total;
+    return _selectedItems.fold(0.0, (sum, item) => sum + item.fat);
   }
 
   Future<void> _saveMeal() async {
-    if (_selectedFoods.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please add at least one food item'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    if (_selectedItems.isEmpty) {
+      _showMessage('Please add at least one food item', isError: true);
       return;
     }
 
-    // Create meal from selected foods
-    final items = _selectedFoods.map((f) => 
-      '${f.food.name} (${f.quantity} ${f.servingUnit})'
-    ).join(', ');
-
     final now = DateTime.now();
+    final selectedDate = widget.selectedDate ?? now;
     final mealTime = DateTime(
-      now.year, now.month, now.day,
-      _selectedTime.hour, _selectedTime.minute,
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+      _selectedTime.hour,
+      _selectedTime.minute,
     );
 
-    final meal = Meal(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      type: _mealType,
-      calories: _totalCalories,
-      time: DateFormat.jm().format(mealTime),
+    final items = _selectedItems.map((item) => item.toCreateMealItem()).toList();
+
+    final request = CreateMealRequest(
+      mealType: _mealType,
+      mealTime: mealTime,
       items: items,
-      protein: _totalProtein,
-      carbs: _totalCarbs,
-      fat: _totalFat,
     );
 
-    // Use provider to add meal
-    final provider = Provider.of<ActivityProvider>(context, listen: false);
-    await provider.addMeal(meal);
-    
-    if (mounted) {
-      Navigator.pop(context);
+    final provider = Provider.of<MealProvider>(context, listen: false);
+    final result = await provider.createMeal(request);
+
+    if (mounted && result['success']) {
+      Navigator.pop(context, true);
     }
+  }
+
+  void _showMessage(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _showCustomFoodDialog() {
@@ -143,9 +133,10 @@ class _AddMealDialogState extends State<AddMealDialog> {
       context: context,
       builder: (context) => CustomFoodDialog(
         onFoodCreated: (food) {
-          _addFood(food, 1.0, food.servingUnit ?? 'serving');
+          _addFood(food, 1.0, food.servingUnit);
         },
-        categoryId: _mealType.toLowerCase(),
+        onCustomFoodAdded: _addCustomFood,
+        initialCategory: _mealType,
       ),
     );
   }
@@ -196,8 +187,7 @@ class _AddMealDialogState extends State<AddMealDialog> {
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 20),
-                
-                // Meal Type
+
                 DropdownButtonFormField<String>(
                   value: _mealType,
                   items: _mealTypes.map((type) {
@@ -210,16 +200,29 @@ class _AddMealDialogState extends State<AddMealDialog> {
                   decoration: const InputDecoration(
                     labelText: 'Meal Type',
                     prefixIcon: Icon(Icons.restaurant),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(12)),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
 
-                // Time
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Time'),
-                  subtitle: Text(_selectedTime.format(context)),
-                  leading: const Icon(Icons.access_time),
+                  subtitle: Text(
+                    _selectedTime.format(context),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
+                  leading: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00C853).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.access_time, color: Color(0xFF00C853)),
+                  ),
                   onTap: () async {
                     final time = await showTimePicker(
                       context: context,
@@ -232,17 +235,16 @@ class _AddMealDialogState extends State<AddMealDialog> {
                 ),
                 const SizedBox(height: 16),
 
-                // Selected Foods List
-                if (_selectedFoods.isNotEmpty) ...[
+                if (_selectedItems.isNotEmpty) ...[
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Selected Foods',
+                        'Selected Items',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                       ),
                       Text(
-                        '${_totalCalories} kcal',
+                        '$_totalCalories kcal',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -255,9 +257,9 @@ class _AddMealDialogState extends State<AddMealDialog> {
                   Expanded(
                     child: ListView.builder(
                       controller: scrollController,
-                      itemCount: _selectedFoods.length,
+                      itemCount: _selectedItems.length,
                       itemBuilder: (context, index) {
-                        final food = _selectedFoods[index];
+                        final item = _selectedItems[index];
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           shape: RoundedRectangleBorder(
@@ -273,14 +275,14 @@ class _AddMealDialogState extends State<AddMealDialog> {
                               ),
                               child: const Icon(Icons.restaurant, color: Color(0xFF00C853), size: 20),
                             ),
-                            title: Text(food.food.name),
+                            title: Text(item.displayName),
                             subtitle: Text(
-                              '${food.quantity} ${food.servingUnit} • ${food.calories} kcal',
+                              '${item.quantity.toStringAsFixed(1)} ${item.servingUnit} • ${item.calories} kcal',
                               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                             ),
                             trailing: IconButton(
-                              icon: const Icon(Icons.close, size: 20),
-                              onPressed: () => _removeFood(food.id),
+                              icon: const Icon(Icons.close, size: 20, color: Colors.red),
+                              onPressed: () => _removeItem(index),
                             ),
                           ),
                         );
@@ -289,8 +291,7 @@ class _AddMealDialogState extends State<AddMealDialog> {
                   ),
                 ],
 
-                // Add Food Button
-                if (_selectedFoods.isEmpty)
+                if (_selectedItems.isEmpty)
                   Expanded(
                     child: Center(
                       child: Column(
@@ -299,15 +300,19 @@ class _AddMealDialogState extends State<AddMealDialog> {
                           Icon(Icons.fastfood_outlined, size: 64, color: Colors.grey[300]),
                           const SizedBox(height: 16),
                           Text(
-                            'No foods selected',
+                            'No items selected',
                             style: TextStyle(color: Colors.grey[600]),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Tap the buttons below to add food items',
+                            style: TextStyle(color: Colors.grey[500], fontSize: 12),
                           ),
                         ],
                       ),
                     ),
                   ),
 
-                // Add Food Buttons
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   child: Row(
@@ -321,6 +326,7 @@ class _AddMealDialogState extends State<AddMealDialog> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
                         ),
                       ),
@@ -340,6 +346,7 @@ class _AddMealDialogState extends State<AddMealDialog> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
                         ),
                       ),
@@ -347,8 +354,7 @@ class _AddMealDialogState extends State<AddMealDialog> {
                   ),
                 ),
 
-                // Macronutrients Summary
-                if (_selectedFoods.isNotEmpty) ...[
+                if (_selectedItems.isNotEmpty) ...[
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -388,12 +394,17 @@ class _AddMealDialogState extends State<AddMealDialog> {
                   const SizedBox(height: 16),
                 ],
 
-                // Save Button
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
                         child: const Text('Cancel'),
                       ),
                     ),
@@ -403,6 +414,11 @@ class _AddMealDialogState extends State<AddMealDialog> {
                         onPressed: _saveMeal,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF00C853),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
                         ),
                         child: const Text('Save Meal'),
                       ),
@@ -433,6 +449,83 @@ class _AddMealDialogState extends State<AddMealDialog> {
           style: TextStyle(fontSize: 12, color: Colors.grey[600]),
         ),
       ],
+    );
+  }
+}
+
+class MealItemInput {
+  final int? foodItemId;
+  final String? customFoodName;
+  final double quantity;
+  final String servingUnit;
+  final int? customCalories;
+  final double? customProtein;
+  final double? customCarbs;
+  final double? customFat;
+
+  MealItemInput({
+    this.foodItemId,
+    this.customFoodName,
+    required this.quantity,
+    required this.servingUnit,
+    this.customCalories,
+    this.customProtein,
+    this.customCarbs,
+    this.customFat,
+  });
+
+  factory MealItemInput.fromFood(FoodItem food, double quantity, String servingUnit) {
+    return MealItemInput(
+      foodItemId: food.id,
+      quantity: quantity,
+      servingUnit: servingUnit,
+    );
+  }
+
+  factory MealItemInput.custom({
+    required String customFoodName,
+    required double quantity,
+    required String servingUnit,
+    required int customCalories,
+    required double customProtein,
+    required double customCarbs,
+    required double customFat,
+  }) {
+    return MealItemInput(
+      customFoodName: customFoodName,
+      quantity: quantity,
+      servingUnit: servingUnit,
+      customCalories: customCalories,
+      customProtein: customProtein,
+      customCarbs: customCarbs,
+      customFat: customFat,
+    );
+  }
+
+  int get calories {
+    if (customCalories != null) return customCalories!;
+    return 0;
+  }
+
+  double get protein => customProtein ?? 0.0;
+  double get carbs => customCarbs ?? 0.0;
+  double get fat => customFat ?? 0.0;
+
+  String get displayName {
+    if (customFoodName != null) return customFoodName!;
+    return 'Food Item';
+  }
+
+  CreateMealItem toCreateMealItem() {
+    return CreateMealItem(
+      foodItemId: foodItemId,
+      quantity: quantity,
+      servingUnit: servingUnit,
+      customFoodName: customFoodName,
+      customCalories: customCalories,
+      customProtein: customProtein,
+      customCarbs: customCarbs,
+      customFat: customFat,
     );
   }
 }
