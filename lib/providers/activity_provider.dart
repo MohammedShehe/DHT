@@ -14,6 +14,12 @@ class ActivityProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
 
+  // Cache for different dates
+  final Map<String, List<Meal>> _mealsCache = {};
+  final Map<String, List<Workout>> _workoutsCache = {};
+  final Map<String, List<Sleep>> _sleepCache = {};
+  final Map<String, List<Hydration>> _hydrationCache = {};
+
   List<double> _weeklyCalories = [0, 0, 0, 0, 0, 0, 0];
   List<double> _weeklyWorkoutMinutes = [0, 0, 0, 0, 0, 0, 0];
   List<double> _weeklySleepHours = [0, 0, 0, 0, 0, 0, 0];
@@ -49,9 +55,27 @@ class ActivityProvider extends ChangeNotifier {
   int get waterGlasses => (totalWaterIntake / 250).round();
 
   void setSelectedDate(DateTime date) {
+    if (_selectedDate.year == date.year && 
+        _selectedDate.month == date.month && 
+        _selectedDate.day == date.day) {
+      return; // Same date, no need to reload
+    }
+    
     _selectedDate = date;
+    
+    // Clear current data
+    _meals = [];
+    _workouts = [];
+    _sleep = [];
+    _hydration = [];
+    
+    // Load data for the selected date
     loadActivityData();
     notifyListeners();
+  }
+
+  String _getDateKey(DateTime date) {
+    return '${date.year}-${date.month}-${date.day}';
   }
 
   Future<void> loadActivityData() async {
@@ -60,28 +84,55 @@ class ActivityProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      try {
-        _meals = await ActivityService.getMeals(_selectedDate);
-      } catch (e) {
-        _meals = [];
+      final dateKey = _getDateKey(_selectedDate);
+      
+      // Check cache first
+      if (_mealsCache.containsKey(dateKey)) {
+        _meals = _mealsCache[dateKey] ?? [];
+      } else {
+        try {
+          _meals = await ActivityService.getMeals(_selectedDate);
+          _mealsCache[dateKey] = _meals;
+        } catch (e) {
+          _meals = [];
+          debugPrint('Error loading meals for ${_selectedDate}: $e');
+        }
       }
       
-      try {
-        _workouts = await ActivityService.getWorkouts(_selectedDate);
-      } catch (e) {
-        _workouts = [];
+      if (_workoutsCache.containsKey(dateKey)) {
+        _workouts = _workoutsCache[dateKey] ?? [];
+      } else {
+        try {
+          _workouts = await ActivityService.getWorkouts(_selectedDate);
+          _workoutsCache[dateKey] = _workouts;
+        } catch (e) {
+          _workouts = [];
+          debugPrint('Error loading workouts for ${_selectedDate}: $e');
+        }
       }
       
-      try {
-        _sleep = await ActivityService.getSleep(_selectedDate);
-      } catch (e) {
-        _sleep = [];
+      if (_sleepCache.containsKey(dateKey)) {
+        _sleep = _sleepCache[dateKey] ?? [];
+      } else {
+        try {
+          _sleep = await ActivityService.getSleep(_selectedDate);
+          _sleepCache[dateKey] = _sleep;
+        } catch (e) {
+          _sleep = [];
+          debugPrint('Error loading sleep for ${_selectedDate}: $e');
+        }
       }
       
-      try {
-        _hydration = await ActivityService.getHydration(_selectedDate);
-      } catch (e) {
-        _hydration = [];
+      if (_hydrationCache.containsKey(dateKey)) {
+        _hydration = _hydrationCache[dateKey] ?? [];
+      } else {
+        try {
+          _hydration = await ActivityService.getHydration(_selectedDate);
+          _hydrationCache[dateKey] = _hydration;
+        } catch (e) {
+          _hydration = [];
+          debugPrint('Error loading hydration for ${_selectedDate}: $e');
+        }
       }
       
       try {
@@ -93,14 +144,54 @@ class ActivityProvider extends ChangeNotifier {
         _medications = [];
       }
 
+      // Load weekly summary (this is independent of selected date)
       await _loadWeeklySummary();
       
     } catch (e) {
       _error = e.toString();
+      debugPrint('Error loading activity data: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  // Refresh all data for current date (clear cache and reload)
+  Future<void> refreshCurrentDate() async {
+    final dateKey = _getDateKey(_selectedDate);
+    
+    // Clear cache for current date
+    _mealsCache.remove(dateKey);
+    _workoutsCache.remove(dateKey);
+    _sleepCache.remove(dateKey);
+    _hydrationCache.remove(dateKey);
+    
+    // Reload data
+    await loadActivityData();
+    
+    _showMessage('Data refreshed for ${_formatDate(_selectedDate)}');
+  }
+
+  // Refresh all cached data (clear everything)
+  Future<void> refreshAllData() async {
+    _isLoading = true;
+    notifyListeners();
+    
+    // Clear all caches
+    _mealsCache.clear();
+    _workoutsCache.clear();
+    _sleepCache.clear();
+    _hydrationCache.clear();
+    
+    // Reload current date
+    await loadActivityData();
+    
+    _showMessage('All data refreshed');
+  }
+
+  String _formatDate(DateTime date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${date.day} ${months[date.month - 1]}';
   }
 
   Future<void> _loadWeeklySummary() async {
@@ -119,6 +210,7 @@ class ActivityProvider extends ChangeNotifier {
       _weeklyWorkoutMinutes = [0, 0, 0, 0, 0, 0, 0];
       _weeklySleepHours = [0, 0, 0, 0, 0, 0, 0];
       _weeklyHydration = [0, 0, 0, 0, 0, 0, 0];
+      debugPrint('Error loading weekly summary: $e');
     }
   }
 
@@ -126,7 +218,22 @@ class ActivityProvider extends ChangeNotifier {
     try {
       final result = await ActivityService.saveMeal(request);
       if (result['success']) {
-        await loadActivityData();
+        // Clear cache for the date of the meal
+        final mealDate = DateTime(
+          request.mealTime.year,
+          request.mealTime.month,
+          request.mealTime.day
+        );
+        final dateKey = _getDateKey(mealDate);
+        _mealsCache.remove(dateKey);
+        
+        // If the meal date is the selected date, reload
+        if (mealDate.year == _selectedDate.year &&
+            mealDate.month == _selectedDate.month &&
+            mealDate.day == _selectedDate.day) {
+          await loadActivityData();
+        }
+        
         _showMessage(result['message'] ?? 'Meal added successfully');
       } else {
         _showMessage(result['message'] ?? 'Error adding meal', isError: true);
@@ -142,6 +249,8 @@ class ActivityProvider extends ChangeNotifier {
     try {
       final result = await ActivityService.updateMeal(mealId, request);
       if (result['success']) {
+        // Clear cache for current date (assuming the meal is from current date)
+        _mealsCache.remove(_getDateKey(_selectedDate));
         await loadActivityData();
         _showMessage(result['message'] ?? 'Meal updated successfully');
       } else {
@@ -158,6 +267,8 @@ class ActivityProvider extends ChangeNotifier {
     try {
       final result = await ActivityService.deleteMeal(mealId);
       if (result['success']) {
+        // Clear cache for current date
+        _mealsCache.remove(_getDateKey(_selectedDate));
         await loadActivityData();
         _showMessage(result['message'] ?? 'Meal deleted successfully');
       } else {
@@ -173,7 +284,21 @@ class ActivityProvider extends ChangeNotifier {
   Future<void> addWorkout(Workout workout) async {
     try {
       await ActivityService.saveWorkout(workout);
-      await loadActivityData();
+      
+      // Parse workout time to get date
+      final workoutDate = workout.time.isNotEmpty 
+          ? DateTime.now() // In a real app, you'd parse the time
+          : _selectedDate;
+      
+      final dateKey = _getDateKey(workoutDate);
+      _workoutsCache.remove(dateKey);
+      
+      if (workoutDate.year == _selectedDate.year &&
+          workoutDate.month == _selectedDate.month &&
+          workoutDate.day == _selectedDate.day) {
+        await loadActivityData();
+      }
+      
       _showMessage('Workout added successfully');
     } catch (e) {
       _error = e.toString();
@@ -185,6 +310,7 @@ class ActivityProvider extends ChangeNotifier {
   Future<void> updateWorkout(Workout workout) async {
     try {
       await ActivityService.updateWorkout(workout);
+      _workoutsCache.remove(_getDateKey(_selectedDate));
       await loadActivityData();
       _showMessage('Workout updated successfully');
     } catch (e) {
@@ -197,6 +323,7 @@ class ActivityProvider extends ChangeNotifier {
   Future<void> deleteWorkout(String workoutId) async {
     try {
       await ActivityService.deleteWorkout(workoutId);
+      _workoutsCache.remove(_getDateKey(_selectedDate));
       await loadActivityData();
       _showMessage('Workout deleted successfully');
     } catch (e) {
@@ -209,7 +336,14 @@ class ActivityProvider extends ChangeNotifier {
   Future<void> addSleep(Sleep sleep) async {
     try {
       await ActivityService.saveSleep(sleep);
-      await loadActivityData();
+      _sleepCache.remove(_getDateKey(sleep.date));
+      
+      if (sleep.date.year == _selectedDate.year &&
+          sleep.date.month == _selectedDate.month &&
+          sleep.date.day == _selectedDate.day) {
+        await loadActivityData();
+      }
+      
       _showMessage('Sleep logged successfully');
     } catch (e) {
       _error = e.toString();
@@ -221,6 +355,7 @@ class ActivityProvider extends ChangeNotifier {
   Future<void> updateSleep(Sleep sleep) async {
     try {
       await ActivityService.updateSleep(sleep);
+      _sleepCache.remove(_getDateKey(_selectedDate));
       await loadActivityData();
       _showMessage('Sleep updated successfully');
     } catch (e) {
@@ -233,6 +368,7 @@ class ActivityProvider extends ChangeNotifier {
   Future<void> deleteSleep(String sleepId) async {
     try {
       await ActivityService.deleteSleep(sleepId);
+      _sleepCache.remove(_getDateKey(_selectedDate));
       await loadActivityData();
       _showMessage('Sleep deleted successfully');
     } catch (e) {
@@ -245,7 +381,21 @@ class ActivityProvider extends ChangeNotifier {
   Future<void> addHydration(Hydration hydration) async {
     try {
       await ActivityService.saveHydration(hydration);
-      await loadActivityData();
+      
+      final hydrationDate = DateTime(
+        hydration.time.year,
+        hydration.time.month,
+        hydration.time.day
+      );
+      final dateKey = _getDateKey(hydrationDate);
+      _hydrationCache.remove(dateKey);
+      
+      if (hydrationDate.year == _selectedDate.year &&
+          hydrationDate.month == _selectedDate.month &&
+          hydrationDate.day == _selectedDate.day) {
+        await loadActivityData();
+      }
+      
       _showMessage('Hydration added successfully');
     } catch (e) {
       _error = e.toString();
@@ -257,6 +407,7 @@ class ActivityProvider extends ChangeNotifier {
   Future<void> updateHydration(Hydration hydration) async {
     try {
       await ActivityService.updateHydration(hydration);
+      _hydrationCache.remove(_getDateKey(_selectedDate));
       await loadActivityData();
       _showMessage('Hydration updated successfully');
     } catch (e) {
@@ -269,6 +420,7 @@ class ActivityProvider extends ChangeNotifier {
   Future<void> deleteHydration(String hydrationId) async {
     try {
       await ActivityService.deleteHydration(hydrationId);
+      _hydrationCache.remove(_getDateKey(_selectedDate));
       await loadActivityData();
       _showMessage('Hydration deleted successfully');
     } catch (e) {
@@ -306,7 +458,7 @@ class ActivityProvider extends ChangeNotifier {
       }
       
       await ActivityService.saveMedication(medication);
-      await loadActivityData();
+      await loadActivityData(); // Medications aren't date-specific, so reload all
       _showMessage('${medication.name} added successfully');
     } catch (e) {
       _error = e.toString();

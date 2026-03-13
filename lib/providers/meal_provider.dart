@@ -16,6 +16,10 @@ class MealProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
 
+  // Cache for meals by date
+  final Map<String, List<Meal>> _mealsCache = {};
+  final Map<String, DailyMealSummary?> _summaryCache = {}; // Changed to nullable
+
   // Getters
   List<FoodCategory> get categories => _categories;
   List<FoodItem> get foods => _foods;
@@ -34,6 +38,10 @@ class MealProvider extends ChangeNotifier {
   // Initialize provider
   MealProvider() {
     loadInitialData();
+  }
+
+  String _getDateKey(DateTime date) {
+    return '${date.year}-${date.month}-${date.day}';
   }
 
   Future<void> loadInitialData() async {
@@ -172,7 +180,16 @@ class MealProvider extends ChangeNotifier {
 
     _isLoading = false;
     if (result['success']) {
-      await loadTodaysMeals();
+      // Clear cache for the date of the meal
+      final mealDate = DateTime(
+        request.mealTime.year,
+        request.mealTime.month,
+        request.mealTime.day
+      );
+      final dateKey = _getDateKey(mealDate);
+      _mealsCache.remove(dateKey);
+      _summaryCache.remove(dateKey);
+      
       _showMessage(result['message'] ?? 'Meal logged successfully');
     } else {
       _showMessage(result['message'] ?? 'Failed to log meal', isError: true);
@@ -184,6 +201,16 @@ class MealProvider extends ChangeNotifier {
 
   Future<void> loadTodaysMeals({DateTime? date}) async {
     final targetDate = date ?? DateTime.now();
+    final dateKey = _getDateKey(targetDate);
+    
+    // Check cache first
+    if (_mealsCache.containsKey(dateKey)) {
+      _todaysMeals = _mealsCache[dateKey] ?? [];
+      _todaysSummary = _summaryCache[dateKey];
+      notifyListeners();
+      return;
+    }
+
     _isLoading = true;
     notifyListeners();
 
@@ -193,10 +220,28 @@ class MealProvider extends ChangeNotifier {
     if (result['success']) {
       _todaysMeals = result['meals'];
       _todaysSummary = result['summary'];
+      
+      // Update cache
+      _mealsCache[dateKey] = _todaysMeals;
+      _summaryCache[dateKey] = _todaysSummary;
     } else {
       _error = result['message'];
     }
     notifyListeners();
+  }
+
+  // Refresh meals for a specific date (clear cache and reload)
+  Future<void> refreshMealsForDate(DateTime date) async {
+    final dateKey = _getDateKey(date);
+    _mealsCache.remove(dateKey);
+    _summaryCache.remove(dateKey);
+    await loadTodaysMeals(date: date);
+    _showMessage('Meals refreshed for ${_formatDate(date)}');
+  }
+
+  String _formatDate(DateTime date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${date.day} ${months[date.month - 1]}';
   }
 
   Future<Map<String, dynamic>> getMealById(int id) async {
@@ -212,6 +257,11 @@ class MealProvider extends ChangeNotifier {
 
     _isLoading = false;
     if (result['success']) {
+      // Clear cache for the date of the updated meal
+      // Since we don't know the meal date, clear all caches to be safe
+      _mealsCache.clear();
+      _summaryCache.clear();
+      
       await loadTodaysMeals();
       _showMessage(result['message'] ?? 'Meal updated successfully');
     } else {
@@ -230,6 +280,11 @@ class MealProvider extends ChangeNotifier {
 
     _isLoading = false;
     if (result['success']) {
+      // Clear cache for the date of the deleted meal
+      // Since we don't know the meal date, clear all caches to be safe
+      _mealsCache.clear();
+      _summaryCache.clear();
+      
       await loadTodaysMeals();
       _showMessage(result['message'] ?? 'Meal deleted successfully');
     } else {
