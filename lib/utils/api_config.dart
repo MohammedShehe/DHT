@@ -7,7 +7,7 @@ class ApiConfig {
     if (isEmulator) {
       return 'http://10.0.2.2:5000/api'; // Android emulator
     } else if (isPhysicalDevice) {
-      return 'http://192.168.1.94:5000/api'; // Your PC's IP address
+      return 'http://192.168.1.59:5000/api'; // Your PC's IP address
     } else {
       return 'http://localhost:5000/api'; // For web
     }

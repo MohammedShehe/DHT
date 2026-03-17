@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
 import '../services/profile_service.dart';
 import '../services/account_service.dart';
 import '../services/password_setup_service.dart';
@@ -13,6 +14,8 @@ import '../utils/api_config.dart';
 import '../models/health_profile_model.dart';
 import 'login_page.dart';
 import 'edit_health_profile_page.dart';
+import 'google_fit_test_page.dart';
+import '../providers/google_fit_provider.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -22,15 +25,12 @@ class ProfileTab extends StatefulWidget {
 }
 
 class _ProfileTabState extends State<ProfileTab> {
-  // User Data
   String fullName = "Loading...";
   String email = "Loading...";
   String profilePic = "";
   
-  // Health Profile Data
   HealthProfileModel? _healthProfile;
   
-  // Real Stats Data
   Map<String, dynamic> _realStats = {
     'streak': 0,
     'points': 0,
@@ -46,7 +46,6 @@ class _ProfileTabState extends State<ProfileTab> {
   
   bool _isLoadingStats = false;
   
-  // Preferences
   ThemeMode _themeMode = ThemeMode.system;
   String _language = "English";
   String _measurementSystem = "Metric";
@@ -55,10 +54,8 @@ class _ProfileTabState extends State<ProfileTab> {
   bool _notificationsEnabled = true;
   bool _dataSyncEnabled = true;
   
-  // Notification permission state
   bool _isCheckingNotificationPermission = false;
   
-  // Form controllers
   final TextEditingController _currentPasswordController = TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
@@ -67,7 +64,6 @@ class _ProfileTabState extends State<ProfileTab> {
   final TextEditingController _newEmailController = TextEditingController();
   final TextEditingController _emailOtpController = TextEditingController();
 
-  // UI State
   Uint8List? _profileImageBytes;
   String? _profileImageName;
   bool _isLoading = true;
@@ -1290,6 +1286,67 @@ class _ProfileTabState extends State<ProfileTab> {
                           ),
                         ),
                         const Divider(height: 1),
+                        
+                        // Google Fit Integration
+                        ListTile(
+                          leading: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Consumer<GoogleFitProvider>(
+                              builder: (context, provider, child) {
+                                return Icon(
+                                  Icons.fitness_center,
+                                  color: provider.isConnected ? Colors.green : Colors.grey,
+                                );
+                              },
+                            ),
+                          ),
+                          title: const Text('Google Fit', style: TextStyle(fontWeight: FontWeight.w500)),
+                          subtitle: Consumer<GoogleFitProvider>(
+                            builder: (context, provider, child) {
+                              return Text(
+                                provider.isConnected 
+                                    ? 'Connected - Tap to manage' 
+                                    : 'Connect to sync fitness data',
+                                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                              );
+                            },
+                          ),
+                          trailing: Consumer<GoogleFitProvider>(
+                            builder: (context, provider, child) {
+                              if (provider.isConnecting) {
+                                return const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                );
+                              }
+                              return Switch(
+                                value: provider.isConnected,
+                                onChanged: (value) async {
+                                  if (value) {
+                                    await provider.connect();
+                                  } else {
+                                    await provider.disconnect();
+                                  }
+                                },
+                                activeColor: Colors.green,
+                              );
+                            },
+                          ),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const GoogleFitTestPage()),
+                            );
+                          },
+                        ),
+                        const Divider(height: 1),
+                        
                         ListTile(
                           leading: Container(width: 40, height: 40, decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: _isExportingData ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.green))) : const Icon(Icons.download, color: Colors.green)),
                           title: const Text('Export Health Data', style: TextStyle(fontWeight: FontWeight.w500)),

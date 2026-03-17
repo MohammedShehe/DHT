@@ -7,6 +7,7 @@ import '../models/meal_models.dart';
 import '../models/meal_request_models.dart';
 import '../providers/activity_provider.dart';
 import '../providers/meal_provider.dart';
+import '../providers/google_fit_provider.dart';
 import '../widgets/date_selector.dart';
 import '../widgets/progress_chart.dart';
 import '../widgets/activity_cards.dart';
@@ -15,6 +16,7 @@ import '../widgets/add_workout_dialog.dart';
 import '../widgets/add_sleep_dialog.dart';
 import '../widgets/add_hydration_dialog.dart';
 import '../widgets/add_medication_dialog.dart';
+import '../widgets/google_fit_connection_widget.dart';
 
 class ActivityTab extends StatefulWidget {
   const ActivityTab({super.key});
@@ -92,10 +94,7 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
                   _tabController.index == 2 ? 'Dinner' :
                   _tabController.index == 3 ? 'Snack' : 'Breakfast',
       ),
-    ).then((_) {
-      // When dialog closes, refresh data
-      _refreshData();
-    });
+    ).then((_) => _refreshData());
   }
 
   void _showAddWorkoutDialog() {
@@ -193,7 +192,6 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
           ],
         ),
         actions: [
-          // Refresh button
           IconButton(
             icon: _isRefreshing
                 ? const SizedBox(
@@ -217,56 +215,77 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
           ),
         ],
       ),
-      body: Consumer<ActivityProvider>(
-        builder: (context, provider, child) {
-          if (provider.isLoading && provider.meals.isEmpty) {
-            return const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF00C853),
-              ),
-            );
-          }
-
-          return Column(
-            children: [
-              DateSelector(
-                selectedDate: _selectedDate,
-                onDateChanged: _onDateChanged,
-              ),
-              // Date indicator
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                color: Colors.grey[100],
-                child: Text(
-                  'Showing data for: ${DateFormat('EEEE, MMMM d, yyyy').format(_selectedDate)}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[700],
-                    fontWeight: FontWeight.w500,
-                  ),
+      body: Column(
+        children: [
+          Consumer<GoogleFitProvider>(
+            builder: (context, fitProvider, child) {
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                height: fitProvider.isConnected ? null : 80,
+                child: GoogleFitConnectionWidget(
+                  onConnected: () {
+                    Provider.of<ActivityProvider>(context, listen: false)
+                        .loadActivityData();
+                  },
                 ),
-              ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    MealsTab(
-                      activityProvider: provider,
-                      mealProvider: Provider.of<MealProvider>(context),
-                      selectedDate: _selectedDate,
-                      onRefresh: _refreshData,
+              );
+            },
+          ),
+          Consumer<ActivityProvider>(
+            builder: (context, provider, child) {
+              if (provider.isLoading && provider.meals.isEmpty) {
+                return const Expanded(
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF00C853),
                     ),
-                    WorkoutsTab(provider: provider, onRefresh: _refreshData),
-                    SleepTab(provider: provider, onRefresh: _refreshData),
-                    HydrationTab(provider: provider, onRefresh: _refreshData),
-                    MedicationsTab(provider: provider, onRefresh: _refreshData),
+                  ),
+                );
+              }
+
+              return Expanded(
+                child: Column(
+                  children: [
+                    DateSelector(
+                      selectedDate: _selectedDate,
+                      onDateChanged: _onDateChanged,
+                    ),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      color: Colors.grey[100],
+                      child: Text(
+                        'Showing data for: ${DateFormat('EEEE, MMMM d, yyyy').format(_selectedDate)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        controller: _tabController,
+                        children: [
+                          MealsTab(
+                            activityProvider: provider,
+                            mealProvider: Provider.of<MealProvider>(context),
+                            selectedDate: _selectedDate,
+                            onRefresh: _refreshData,
+                          ),
+                          WorkoutsTab(provider: provider, onRefresh: _refreshData),
+                          SleepTab(provider: provider, onRefresh: _refreshData),
+                          HydrationTab(provider: provider, onRefresh: _refreshData),
+                          MedicationsTab(provider: provider, onRefresh: _refreshData),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-              ),
-            ],
-          );
-        },
+              );
+            },
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
@@ -296,7 +315,6 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
   }
 }
 
-// MealsTab with date display
 class MealsTab extends StatelessWidget {
   final ActivityProvider activityProvider;
   final MealProvider mealProvider;
@@ -313,7 +331,6 @@ class MealsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Load meals for selected date when tab is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       mealProvider.loadTodaysMeals(date: selectedDate);
     });
@@ -364,7 +381,7 @@ class MealsTab extends StatelessWidget {
                       height: 200,
                       child: ProgressChart.bar(
                         data: activityProvider.weeklyCalories,
-                        labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+                        labels: const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
                         color: Colors.orange,
                         title: 'Weekly Calories',
                       ),
@@ -701,7 +718,6 @@ class MealsTab extends StatelessWidget {
   }
 }
 
-// WorkoutsTab with refresh
 class WorkoutsTab extends StatelessWidget {
   final ActivityProvider provider;
   final Future<void> Function() onRefresh;
@@ -741,7 +757,7 @@ class WorkoutsTab extends StatelessWidget {
                       height: 200,
                       child: ProgressChart.bar(
                         data: provider.weeklyWorkoutMinutes,
-                        labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+                        labels: const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
                         color: Colors.green,
                         title: 'Weekly Workouts',
                       ),
@@ -878,7 +894,6 @@ class WorkoutsTab extends StatelessWidget {
   }
 }
 
-// SleepTab with refresh
 class SleepTab extends StatelessWidget {
   final ActivityProvider provider;
   final Future<void> Function() onRefresh;
@@ -920,7 +935,7 @@ class SleepTab extends StatelessWidget {
                       height: 200,
                       child: ProgressChart.bar(
                         data: provider.weeklySleepHours,
-                        labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+                        labels: const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
                         color: Colors.purple,
                         title: 'Weekly Sleep',
                       ),
@@ -1120,7 +1135,6 @@ class SleepTab extends StatelessWidget {
   }
 }
 
-// HydrationTab with refresh
 class HydrationTab extends StatelessWidget {
   final ActivityProvider provider;
   final Future<void> Function() onRefresh;
@@ -1234,7 +1248,7 @@ class HydrationTab extends StatelessWidget {
                       height: 200,
                       child: ProgressChart.bar(
                         data: provider.weeklyHydration,
-                        labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+                        labels: const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
                         color: Colors.blue,
                         title: 'Weekly Hydration',
                       ),
@@ -1317,7 +1331,6 @@ class HydrationTab extends StatelessWidget {
   }
 }
 
-// MedicationsTab with refresh
 class MedicationsTab extends StatelessWidget {
   final ActivityProvider provider;
   final Future<void> Function() onRefresh;
@@ -1608,7 +1621,6 @@ class MedicationsTab extends StatelessWidget {
   }
 }
 
-// WeeklySummarySheet
 class WeeklySummarySheet extends StatelessWidget {
   final ActivityProvider provider;
 
@@ -1829,7 +1841,6 @@ class WeeklySummarySheet extends StatelessWidget {
   }
 }
 
-// Meal Details Sheet (defined inside the same file)
 class _MealDetailsSheet extends StatelessWidget {
   final Meal meal;
 

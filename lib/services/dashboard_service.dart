@@ -269,12 +269,12 @@ class DashboardService {
       List<ActivitySummary> activities = [];
 
       final results = await Future.wait([
-        http.get(Uri.parse('$baseUrl/steps/logs?page=1&limit=5'), headers: headers).catchError((e) => null),
-        http.get(Uri.parse('$baseUrl/water/logs?page=1&limit=5'), headers: headers).catchError((e) => null),
-        http.get(Uri.parse('$baseUrl/sleep/logs?page=1&limit=5'), headers: headers).catchError((e) => null),
-        http.get(Uri.parse('$baseUrl/meditation/logs?page=1&limit=5'), headers: headers).catchError((e) => null),
-        http.get(Uri.parse('$baseUrl/workouts/logs?page=1&limit=5'), headers: headers).catchError((e) => null),
-        http.get(Uri.parse('$baseUrl/calories/logs?page=1&limit=5'), headers: headers).catchError((e) => null),
+        http.get(Uri.parse('$baseUrl/steps/logs?page=1&limit=5'), headers: headers).catchError((e) => http.Response('{}', 500)),
+        http.get(Uri.parse('$baseUrl/water/logs?page=1&limit=5'), headers: headers).catchError((e) => http.Response('{}', 500)),
+        http.get(Uri.parse('$baseUrl/sleep/logs?page=1&limit=5'), headers: headers).catchError((e) => http.Response('{}', 500)),
+        http.get(Uri.parse('$baseUrl/meditation/logs?page=1&limit=5'), headers: headers).catchError((e) => http.Response('{}', 500)),
+        http.get(Uri.parse('$baseUrl/workouts/logs?page=1&limit=5'), headers: headers).catchError((e) => http.Response('{}', 500)),
+        http.get(Uri.parse('$baseUrl/calories/logs?page=1&limit=5'), headers: headers).catchError((e) => http.Response('{}', 500)),
       ]);
 
       // Parse steps logs
@@ -606,10 +606,10 @@ class DashboardService {
       final sevenDaysAgo = todayStart.subtract(const Duration(days: 7));
       
       final results = await Future.wait([
-        http.get(Uri.parse('$baseUrl/steps/logs?page=1&limit=100'), headers: headers).catchError((e) => null),
-        http.get(Uri.parse('$baseUrl/water/logs?page=1&limit=100'), headers: headers).catchError((e) => null),
-        http.get(Uri.parse('$baseUrl/sleep/logs?page=1&limit=100'), headers: headers).catchError((e) => null),
-        http.get(Uri.parse('$baseUrl/meditation/logs?page=1&limit=100'), headers: headers).catchError((e) => null),
+        http.get(Uri.parse('$baseUrl/steps/logs?page=1&limit=100'), headers: headers).catchError((e) => http.Response('{}', 500)),
+        http.get(Uri.parse('$baseUrl/water/logs?page=1&limit=100'), headers: headers).catchError((e) => http.Response('{}', 500)),
+        http.get(Uri.parse('$baseUrl/sleep/logs?page=1&limit=100'), headers: headers).catchError((e) => http.Response('{}', 500)),
+        http.get(Uri.parse('$baseUrl/meditation/logs?page=1&limit=100'), headers: headers).catchError((e) => http.Response('{}', 500)),
       ]);
 
       List<double> stepsData = List.filled(7, 0.0);

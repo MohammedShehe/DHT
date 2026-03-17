@@ -10,7 +10,8 @@ import 'providers/gamification_provider.dart';
 import 'providers/dashboard_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/smart_reminder_provider.dart';
-import 'providers/meal_provider.dart'; // NEW
+import 'providers/meal_provider.dart';
+import 'providers/google_fit_provider.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -24,7 +25,7 @@ void main() async {
     await Firebase.initializeApp();
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   } catch (e) {
-    print('Firebase initialization error: $e');
+    debugPrint('Firebase initialization error: $e');
   }
   
   await AuthService.initializeToken();
@@ -49,7 +50,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => DashboardProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => SmartReminderProvider()),
-        ChangeNotifierProvider(create: (_) => MealProvider()), // NEW
+        ChangeNotifierProvider(create: (_) => MealProvider()),
+        ChangeNotifierProvider(create: (_) => GoogleFitProvider()),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
