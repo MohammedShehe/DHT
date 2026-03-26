@@ -246,6 +246,7 @@ class _GoogleFitTestPageState extends State<GoogleFitTestPage> {
                     
                     const SizedBox(height: 24),
                     
+                    /// 🔹 UPDATED: Proper sync button that actually works
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -261,6 +262,7 @@ class _GoogleFitTestPageState extends State<GoogleFitTestPage> {
                                     backgroundColor: result['success']
                                         ? Colors.green
                                         : Colors.red,
+                                    behavior: SnackBarBehavior.floating,
                                   ),
                                 );
                               },

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/google_fit_provider.dart';
+import '../providers/activity_provider.dart';
 
 class GoogleFitConnectionWidget extends StatefulWidget {
   final VoidCallback? onConnected;
@@ -257,19 +258,36 @@ class _GoogleFitConnectionWidgetState extends State<GoogleFitConnectionWidget> {
 
                     const SizedBox(height: 12),
 
-                    /// SYNC BUTTON
+                    /// 🔹 UPDATED SYNC BUTTON - NOW ACTUALLY SYNCING
                     Center(
                       child: OutlinedButton.icon(
                         onPressed: provider.isSyncing
                             ? null
-                            : () {
-                                ScaffoldMessenger.of(context)
-                                    .showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Data synced to app'),
-                                    backgroundColor: Colors.green,
-                                  ),
+                            : () async {
+                                // Get the activity provider
+                                final activityProvider = Provider.of<ActivityProvider>(
+                                  context, 
+                                  listen: false
                                 );
+                                
+                                // Perform the actual sync
+                                final result = await provider.syncToActivityProvider(
+                                  activityProvider,
+                                  date: DateTime.now(), // Sync today's data
+                                );
+                                
+                                // Show result message
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(result['message']),
+                                      backgroundColor: result['success'] 
+                                          ? Colors.green 
+                                          : Colors.red,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
                               },
                         icon: provider.isSyncing
                             ? const SizedBox(

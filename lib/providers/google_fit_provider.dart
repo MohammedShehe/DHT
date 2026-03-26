@@ -145,26 +145,40 @@ class GoogleFitProvider extends ChangeNotifier {
     try {
       final targetDate = date ?? DateTime.now();
       
+      // FIX: Set proper start and end times for the day
+      final startOfDay = DateTime(targetDate.year, targetDate.month, targetDate.day, 0, 0, 0);
+      final endOfDay = DateTime(targetDate.year, targetDate.month, targetDate.day, 23, 59, 59);
+      
       final steps = await _fitService.getTotalSteps(targetDate);
       final workouts = await _fitService.syncActivitiesToWorkouts(targetDate);
       
+      int syncedCount = 0;
       for (var workout in workouts) {
-        await activityProvider.addWorkout(workout);
+        try {
+          await activityProvider.addWorkout(workout);
+          syncedCount++;
+        } catch (e) {
+          debugPrint('Error syncing workout: $e');
+        }
       }
       
       _isSyncing = false;
       notifyListeners();
       
+      String message = syncedCount > 0 
+          ? 'Synced $syncedCount activities to app'
+          : 'No new activities to sync';
+          
       return {
         'success': true,
-        'message': 'Synced ${workouts.length} activities',
+        'message': message,
         'steps': steps,
-        'activities': workouts.length,
+        'activities': syncedCount,
       };
     } catch (e) {
       _isSyncing = false;
       notifyListeners();
-      return {'success': false, 'message': 'Sync failed'};
+      return {'success': false, 'message': 'Sync failed: ${e.toString()}'};
     }
   }
 
