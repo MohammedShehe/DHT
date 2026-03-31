@@ -1,4 +1,3 @@
-// lib/widgets/food_selection_widget.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/meal_models.dart';
@@ -28,10 +27,10 @@ class _FoodSelectionWidgetState extends State<FoodSelectionWidget> with SingleTi
   int? _selectedCategoryId;
   bool _isSearching = false;
 
-  // For quantity selection
   FoodItem? _selectedFood;
   double _quantity = 1.0;
   String _selectedUnit = 'g';
+  
   final List<String> _servingUnits = ['g', 'ml', 'oz', 'cup', 'tbsp', 'tsp', 'piece', 'slice', 'serving'];
 
   @override
@@ -40,7 +39,6 @@ class _FoodSelectionWidgetState extends State<FoodSelectionWidget> with SingleTi
     _tabController = TabController(length: 2, vsync: this);
     _searchController.addListener(_onSearchChanged);
     
-    // Load initial foods
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<MealProvider>(context, listen: false);
       provider.loadPopularFoods();
@@ -82,7 +80,8 @@ class _FoodSelectionWidgetState extends State<FoodSelectionWidget> with SingleTi
   void _selectFood(FoodItem food) {
     setState(() {
       _selectedFood = food;
-      _selectedUnit = food.servingUnit;
+      final validUnit = _servingUnits.contains(food.servingUnit) ? food.servingUnit : 'g';
+      _selectedUnit = validUnit;
       _quantity = 1.0;
     });
   }
@@ -129,7 +128,6 @@ class _FoodSelectionWidgetState extends State<FoodSelectionWidget> with SingleTi
       ),
       child: Column(
         children: [
-          // Header
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -158,7 +156,6 @@ class _FoodSelectionWidgetState extends State<FoodSelectionWidget> with SingleTi
             ),
           ),
 
-          // Search Bar
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
@@ -183,7 +180,6 @@ class _FoodSelectionWidgetState extends State<FoodSelectionWidget> with SingleTi
             ),
           ),
 
-          // Categories
           Container(
             height: 70,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -239,7 +235,6 @@ class _FoodSelectionWidgetState extends State<FoodSelectionWidget> with SingleTi
             ),
           ),
 
-          // Food List
           Expanded(
             child: _isSearching
                 ? _buildFoodList(provider, _searchResults)
@@ -466,7 +461,6 @@ class _FoodSelectionWidgetState extends State<FoodSelectionWidget> with SingleTi
       ),
       child: Column(
         children: [
-          // Header
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -504,7 +498,6 @@ class _FoodSelectionWidgetState extends State<FoodSelectionWidget> with SingleTi
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Selected Food
                   Card(
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     child: Padding(
@@ -554,7 +547,6 @@ class _FoodSelectionWidgetState extends State<FoodSelectionWidget> with SingleTi
 
                   const SizedBox(height: 24),
 
-                  // Quantity
                   const Text(
                     'Quantity',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
@@ -622,7 +614,6 @@ class _FoodSelectionWidgetState extends State<FoodSelectionWidget> with SingleTi
 
                   const SizedBox(height: 24),
 
-                  // Nutrition Summary
                   const Text(
                     'Nutrition Summary',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
@@ -672,7 +663,6 @@ class _FoodSelectionWidgetState extends State<FoodSelectionWidget> with SingleTi
             ),
           ),
 
-          // Bottom Buttons
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(

@@ -16,6 +16,9 @@ class GoogleFitService {
 
   static const String FITNESS_API_BASE = 'https://www.googleapis.com/fitness/v1/users/me';
   
+  // Google Fit uses epoch of January 1, 1980
+  static final DateTime _googleFitEpoch = DateTime(1980, 1, 1);
+  
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: [
       'email',
@@ -223,6 +226,16 @@ class GoogleFitService {
     return 0;
   }
 
+  // Convert DateTime to Google Fit nanoseconds (since Jan 1, 1980)
+  int _toGoogleFitNanos(DateTime date) {
+    return (date.millisecondsSinceEpoch - _googleFitEpoch.millisecondsSinceEpoch) * 1000000;
+  }
+
+  // Convert Google Fit nanoseconds back to DateTime
+  DateTime _fromGoogleFitNanos(int nanos) {
+    return DateTime.fromMillisecondsSinceEpoch((nanos ~/ 1000000) + _googleFitEpoch.millisecondsSinceEpoch);
+  }
+
   Future<List<FitnessDataPoint>> getSteps(DateTime date) async {
     final dateKey = _getDateKey(date);
     debugPrint('👣 Getting steps for date: $dateKey');
@@ -289,13 +302,9 @@ class GoogleFitService {
                       int endTimeNanos = _parseNanos(point['endTimeNanos']);
                       
                       steps.add(FitnessDataPoint(
-                        startTime: DateTime.fromMillisecondsSinceEpoch(
-                          startTimeNanos ~/ 1000000,
-                        ),
-                        endTime: DateTime.fromMillisecondsSinceEpoch(
-                          endTimeNanos ~/ 1000000,
-                        ),
-                        value: value.toDouble(),
+                        startTime: _fromGoogleFitNanos(startTimeNanos),
+                        endTime: _fromGoogleFitNanos(endTimeNanos),
+                        value: (value is num) ? value.toDouble() : 0.0,
                         unit: 'steps',
                         type: FitnessDataType.steps,
                         source: FitnessDataSource.googleFit,
@@ -386,13 +395,9 @@ class GoogleFitService {
                       int endTimeNanos = _parseNanos(point['endTimeNanos']);
                       
                       calories.add(FitnessDataPoint(
-                        startTime: DateTime.fromMillisecondsSinceEpoch(
-                          startTimeNanos ~/ 1000000,
-                        ),
-                        endTime: DateTime.fromMillisecondsSinceEpoch(
-                          endTimeNanos ~/ 1000000,
-                        ),
-                        value: value.toDouble(),
+                        startTime: _fromGoogleFitNanos(startTimeNanos),
+                        endTime: _fromGoogleFitNanos(endTimeNanos),
+                        value: (value is num) ? value.toDouble() : 0.0,
                         unit: 'kcal',
                         type: FitnessDataType.calories,
                         source: FitnessDataSource.googleFit,
@@ -478,15 +483,11 @@ class GoogleFitService {
                       
                       int startTimeNanos = _parseNanos(point['startTimeNanos']);
                       int endTimeNanos = _parseNanos(point['endTimeNanos']);
-                      
+                          
                       heartRates.add(FitnessDataPoint(
-                        startTime: DateTime.fromMillisecondsSinceEpoch(
-                          startTimeNanos ~/ 1000000,
-                        ),
-                        endTime: DateTime.fromMillisecondsSinceEpoch(
-                          endTimeNanos ~/ 1000000,
-                        ),
-                        value: value.toDouble(),
+                        startTime: _fromGoogleFitNanos(startTimeNanos),
+                        endTime: _fromGoogleFitNanos(endTimeNanos),
+                        value: (value is num) ? value.toDouble() : 0.0,
                         unit: 'bpm',
                         type: FitnessDataType.heartRate,
                         source: FitnessDataSource.googleFit,
@@ -520,6 +521,7 @@ class GoogleFitService {
     return sum / heartRates.length;
   }
 
+  // FIXED: Google Fit API /sessions expects timestamps in NANOSECONDS since Jan 1, 1980
   Future<List<FitnessActivity>> getActivities(DateTime startDate, DateTime endDate) async {
     final dateRangeKey = '${_getDateKey(startDate)}_${_getDateKey(endDate)}';
     
@@ -540,14 +542,20 @@ class GoogleFitService {
     }
     
     try {
-      final startMillis = startDate.millisecondsSinceEpoch;
-      final endMillis = endDate.millisecondsSinceEpoch;
+      // CRITICAL FIX: Convert to NANOSECONDS since Google Fit epoch (Jan 1, 1980)
+      final startNanos = _toGoogleFitNanos(startDate);
+      final endNanos = _toGoogleFitNanos(endDate);
       
-      debugPrint('📅 Time range in ms: $startMillis to $endMillis');
+      // If start and end are the same, add 1 day in nanoseconds
+      final actualEndNanos = (startNanos == endNanos) 
+          ? startNanos + Duration(days: 1).inMilliseconds * 1000000
+          : endNanos;
+      
+      debugPrint('📅 Time range in ns (Google Fit epoch): $startNanos to $actualEndNanos');
       
       final response = await _authenticatedRequest(
         'GET',
-        '/sessions?startTime=$startMillis&endTime=$endMillis',
+        '/sessions?startTime=$startNanos&endTime=$actualEndNanos',
       );
 
       List<FitnessActivity> activities = [];
@@ -565,29 +573,57 @@ class GoogleFitService {
             
             int calories = 0;
             int steps = 0;
-            double distance = 0;
+            double distance = 0.0;
             
-            if (session.containsKey('activityType')) {
-              final activity = FitnessActivity(
-                id: session['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                name: session['name'] ?? 'Activity',
-                activityType: session['activityType'] ?? 0,
-                startTime: DateTime.fromMillisecondsSinceEpoch(
-                  int.parse(session['startTimeMillis']),
-                ),
-                endTime: DateTime.fromMillisecondsSinceEpoch(
-                  int.parse(session['endTimeMillis']),
-                ),
-                duration: (int.parse(session['endTimeMillis']) - 
-                          int.parse(session['startTimeMillis'])) / 60000.0,
-                calories: calories,
-                steps: steps,
-                distance: distance,
-              );
+            try {
+              // Parse times from milliseconds (still in milliseconds in session data)
+              final startTimeMillis = int.parse(session['startTimeMillis'].toString());
+              final endTimeMillis = int.parse(session['endTimeMillis'].toString());
               
-              activities.add(activity);
-              debugPrint('✅ Added activity: ${activity.name}, duration: ${activity.duration}min');
+              final activityStartTime = DateTime.fromMillisecondsSinceEpoch(startTimeMillis);
+              final activityEndTime = DateTime.fromMillisecondsSinceEpoch(endTimeMillis);
+              
+              // Get steps during this activity
+              final stepsData = await getStepsForTimeRange(activityStartTime, activityEndTime);
+              steps = stepsData;
+              
+              // Get calories during this activity
+              final caloriesData = await getCaloriesForTimeRange(activityStartTime, activityEndTime);
+              calories = caloriesData;
+              
+              if (session.containsKey('distance')) {
+                final distanceValue = session['distance'];
+                if (distanceValue is int) {
+                  distance = distanceValue.toDouble();
+                } else if (distanceValue is double) {
+                  distance = distanceValue;
+                } else if (distanceValue is String) {
+                  distance = double.tryParse(distanceValue) ?? 0.0;
+                }
+              }
+            } catch (e) {
+              debugPrint('⚠️ Error getting additional activity data: $e');
             }
+            
+            final startTimeMillis = int.parse(session['startTimeMillis'].toString());
+            final endTimeMillis = int.parse(session['endTimeMillis'].toString());
+            
+            final activity = FitnessActivity(
+              id: session['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+              name: session['name']?.toString() ?? 'Activity',
+              activityType: session['activityType'] is int 
+                  ? session['activityType'] 
+                  : (session['activityType']?.toInt() ?? 0),
+              startTime: DateTime.fromMillisecondsSinceEpoch(startTimeMillis),
+              endTime: DateTime.fromMillisecondsSinceEpoch(endTimeMillis),
+              duration: (endTimeMillis - startTimeMillis) / 60000.0,
+              calories: calories,
+              steps: steps,
+              distance: distance,
+            );
+            
+            activities.add(activity);
+            debugPrint('✅ Added activity: ${activity.name}, duration: ${activity.duration}min, calories: $calories, steps: $steps');
           }
         } else {
           debugPrint('⚠️ No sessions found in response');
@@ -604,6 +640,112 @@ class GoogleFitService {
     } catch (e) {
       debugPrint('❌ Exception in getActivities: $e');
       return [];
+    }
+  }
+
+  Future<int> getStepsForTimeRange(DateTime startTime, DateTime endTime) async {
+    try {
+      final requestBody = {
+        'aggregateBy': [
+          {
+            'dataTypeName': 'com.google.step_count.delta',
+          }
+        ],
+        'startTimeMillis': startTime.millisecondsSinceEpoch,
+        'endTimeMillis': endTime.millisecondsSinceEpoch,
+      };
+
+      final response = await _authenticatedRequest(
+        'POST',
+        '/dataset:aggregate',
+        body: requestBody,
+      );
+
+      int totalSteps = 0;
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        
+        if (data['bucket'] != null) {
+          for (var bucket in data['bucket']) {
+            if (bucket['dataset'] != null && bucket['dataset'].isNotEmpty) {
+              for (var dataset in bucket['dataset']) {
+                if (dataset['point'] != null) {
+                  for (var point in dataset['point']) {
+                    if (point['value'] != null && point['value'].isNotEmpty) {
+                      final value = point['value'][0]['intVal'] ?? 
+                                   point['value'][0]['fpVal'] ?? 
+                                   0;
+                      if (value is num) {
+                        totalSteps += value.toInt();
+                      } else if (value is int) {
+                        totalSteps += value;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      return totalSteps;
+    } catch (e) {
+      debugPrint('❌ Error getting steps for time range: $e');
+      return 0;
+    }
+  }
+
+  Future<int> getCaloriesForTimeRange(DateTime startTime, DateTime endTime) async {
+    try {
+      final requestBody = {
+        'aggregateBy': [
+          {
+            'dataTypeName': 'com.google.calories.expended',
+          }
+        ],
+        'startTimeMillis': startTime.millisecondsSinceEpoch,
+        'endTimeMillis': endTime.millisecondsSinceEpoch,
+      };
+
+      final response = await _authenticatedRequest(
+        'POST',
+        '/dataset:aggregate',
+        body: requestBody,
+      );
+
+      int totalCalories = 0;
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        
+        if (data['bucket'] != null) {
+          for (var bucket in data['bucket']) {
+            if (bucket['dataset'] != null && bucket['dataset'].isNotEmpty) {
+              for (var dataset in bucket['dataset']) {
+                if (dataset['point'] != null) {
+                  for (var point in dataset['point']) {
+                    if (point['value'] != null && point['value'].isNotEmpty) {
+                      final value = point['value'][0]['fpVal'] ?? 0;
+                      if (value is num) {
+                        totalCalories += value.toInt();
+                      } else if (value is int) {
+                        totalCalories += value;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      return totalCalories;
+    } catch (e) {
+      debugPrint('❌ Error getting calories for time range: $e');
+      return 0;
     }
   }
 
@@ -673,13 +815,9 @@ class GoogleFitService {
                       int endTimeNanos = _parseNanos(point['endTimeNanos']);
                       
                       segments.add(SleepSegment(
-                        startTime: DateTime.fromMillisecondsSinceEpoch(
-                          startTimeNanos ~/ 1000000,
-                        ),
-                        endTime: DateTime.fromMillisecondsSinceEpoch(
-                          endTimeNanos ~/ 1000000,
-                        ),
-                        sleepType: sleepType,
+                        startTime: _fromGoogleFitNanos(startTimeNanos),
+                        endTime: _fromGoogleFitNanos(endTimeNanos),
+                        sleepType: sleepType is int ? sleepType : 0,
                       ));
                     }
                   }
@@ -730,7 +868,9 @@ class GoogleFitService {
     final steps = await getTotalSteps(date);
     final calories = await getTotalCalories(date);
     final heartRate = await getAverageHeartRate(date);
-    final activities = await getActivities(date, date);
+    final startOfDay = DateTime(date.year, date.month, date.day, 0, 0, 0);
+    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+    final activities = await getActivities(startOfDay, endOfDay);
     
     double activeMinutes = 0;
     double totalDistance = 0;
@@ -780,7 +920,6 @@ class GoogleFitService {
     debugPrint('🔄 Syncing activities to workouts for date: ${_getDateKey(date)}');
     
     try {
-      // FIX: Get activities for the entire day, not just a single point
       final startOfDay = DateTime(date.year, date.month, date.day, 0, 0, 0);
       final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
       
@@ -792,7 +931,7 @@ class GoogleFitService {
       for (var activity in activities) {
         debugPrint('📊 Processing activity: ${activity.name}, duration: ${activity.duration}min, calories: ${activity.calories}');
         
-        if (activity.duration >= 5) { // Only sync activities >= 5 minutes
+        if (activity.duration >= 5) {
           final workout = Workout(
             id: activity.id,
             type: activity.name,
@@ -836,7 +975,6 @@ class GoogleFitService {
     _sleepCache.clear();
   }
 
-  // Add this method to test the connection
   Future<Map<String, dynamic>> testConnection() async {
     debugPrint('🧪 Testing Google Fit connection...');
     
@@ -848,14 +986,11 @@ class GoogleFitService {
         }
       }
       
-      // Try to get today's activities
       final today = DateTime.now();
       final startOfDay = DateTime(today.year, today.month, today.day, 0, 0, 0);
       final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
       
       final activities = await getActivities(startOfDay, endOfDay);
-      
-      // Try to get steps
       final steps = await getSteps(today);
       
       return {

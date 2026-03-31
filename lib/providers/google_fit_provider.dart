@@ -32,9 +32,6 @@ class GoogleFitProvider extends ChangeNotifier {
   
   Function(String message, {bool isError})? onShowMessage;
 
-  // Remove initialize method - GoogleFitService doesn't need initialization
-  // Just check if available
-
   Future<bool> connect() async {
     _isConnecting = true;
     _error = null;
@@ -136,7 +133,12 @@ class GoogleFitProvider extends ChangeNotifier {
     DateTime? date,
   }) async {
     if (!_isConnected) {
-      return {'success': false, 'message': 'Not connected to Google Fit'};
+      // Try silent connect first
+      final connected = await _fitService.silentConnect();
+      if (!connected) {
+        return {'success': false, 'message': 'Not connected to Google Fit'};
+      }
+      _isConnected = true;
     }
 
     _isSyncing = true;
@@ -145,20 +147,24 @@ class GoogleFitProvider extends ChangeNotifier {
     try {
       final targetDate = date ?? DateTime.now();
       
-      // FIX: Set proper start and end times for the day
       final startOfDay = DateTime(targetDate.year, targetDate.month, targetDate.day, 0, 0, 0);
       final endOfDay = DateTime(targetDate.year, targetDate.month, targetDate.day, 23, 59, 59);
       
+      debugPrint('🔄 Syncing for date range: ${startOfDay.toIso8601String()} to ${endOfDay.toIso8601String()}');
+      
       final steps = await _fitService.getTotalSteps(targetDate);
       final workouts = await _fitService.syncActivitiesToWorkouts(targetDate);
+      
+      debugPrint('📊 Found ${workouts.length} workouts to sync');
       
       int syncedCount = 0;
       for (var workout in workouts) {
         try {
           await activityProvider.addWorkout(workout);
           syncedCount++;
+          debugPrint('✅ Synced workout: ${workout.type}');
         } catch (e) {
-          debugPrint('Error syncing workout: $e');
+          debugPrint('❌ Error syncing workout: $e');
         }
       }
       
