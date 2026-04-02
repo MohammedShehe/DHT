@@ -31,6 +31,15 @@ class WorkoutType {
       'created_by': createdBy,
     };
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is WorkoutType && other.id == id;
+  }
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 class WorkoutDetail {

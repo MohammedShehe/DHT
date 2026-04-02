@@ -75,15 +75,21 @@ class WorkoutDetailService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         List<WorkoutType> types = [];
+        final Set<int> addedIds = {}; // Track unique IDs to prevent duplicates
+        
         if (data is List) {
           for (var item in data) {
             try {
-              types.add(WorkoutType(
-                id: _toInt(item['id']),
-                name: item['name']?.toString() ?? '',
-                isCustom: item['is_custom'] == 1 || item['is_custom'] == true || item['is_custom'] == '1',
-                createdBy: _toIntNullable(item['created_by']),
-              ));
+              final id = _toInt(item['id']);
+              if (!addedIds.contains(id)) {
+                addedIds.add(id);
+                types.add(WorkoutType(
+                  id: id,
+                  name: item['name']?.toString() ?? '',
+                  isCustom: item['is_custom'] == 1 || item['is_custom'] == true || item['is_custom'] == '1',
+                  createdBy: _toIntNullable(item['created_by']),
+                ));
+              }
             } catch (e) {
               debugPrint('Error parsing workout type: $e');
             }
@@ -298,25 +304,31 @@ class WorkoutDetailService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         List<WorkoutDetail> workouts = [];
+        final Set<int> addedIds = {}; // Track unique IDs
+        
         if (data is List) {
           for (var w in data) {
             try {
-              workouts.add(WorkoutDetail(
-                id: _toInt(w['id']),
-                workoutTypeId: _toIntNullable(w['workout_type_id']),
-                customWorkoutName: w['custom_workout_name']?.toString(),
-                workoutTime: DateTime.parse(w['workout_time'] as String),
-                durationMinutes: _toInt(w['duration_minutes']),
-                intensity: w['intensity']?.toString() ?? 'moderate',
-                distance: _toDoubleNullable(w['distance']),
-                heartRate: _toIntNullable(w['heart_rate']),
-                feeling: w['feeling']?.toString(),
-                notes: w['notes']?.toString(),
-                caloriesBurned: _toIntNullable(w['calories_burned']),
-                workoutTypeName: w['workout_type_name']?.toString(),
-                createdAt: DateTime.parse(w['created_at'] as String),
-                updatedAt: DateTime.parse(w['updated_at'] as String),
-              ));
+              final id = _toInt(w['id']);
+              if (!addedIds.contains(id)) {
+                addedIds.add(id);
+                workouts.add(WorkoutDetail(
+                  id: id,
+                  workoutTypeId: _toIntNullable(w['workout_type_id']),
+                  customWorkoutName: w['custom_workout_name']?.toString(),
+                  workoutTime: DateTime.parse(w['workout_time'] as String),
+                  durationMinutes: _toInt(w['duration_minutes']),
+                  intensity: w['intensity']?.toString() ?? 'moderate',
+                  distance: _toDoubleNullable(w['distance']),
+                  heartRate: _toIntNullable(w['heart_rate']),
+                  feeling: w['feeling']?.toString(),
+                  notes: w['notes']?.toString(),
+                  caloriesBurned: _toIntNullable(w['calories_burned']),
+                  workoutTypeName: w['workout_type_name']?.toString(),
+                  createdAt: DateTime.parse(w['created_at'] as String),
+                  updatedAt: DateTime.parse(w['updated_at'] as String),
+                ));
+              }
             } catch (e) {
               debugPrint('Error parsing workout: $e');
             }
@@ -575,17 +587,23 @@ class WorkoutDetailService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         List<WeeklyWorkoutStats> stats = [];
+        final Set<String> addedDates = {}; // Track unique dates
+        
         if (data is List) {
           for (var item in data) {
             try {
-              stats.add(WeeklyWorkoutStats(
-                date: DateTime.parse(item['date'] as String),
-                workoutCount: _toInt(item['workout_count']),
-                totalDuration: _toInt(item['total_duration']),
-                totalCalories: _toInt(item['total_calories']),
-                totalDistance: _toDouble(item['total_distance']),
-                avgHeartRate: _toDoubleNullable(item['avg_heart_rate']),
-              ));
+              final date = item['date'] as String;
+              if (!addedDates.contains(date)) {
+                addedDates.add(date);
+                stats.add(WeeklyWorkoutStats(
+                  date: DateTime.parse(date),
+                  workoutCount: _toInt(item['workout_count']),
+                  totalDuration: _toInt(item['total_duration']),
+                  totalCalories: _toInt(item['total_calories']),
+                  totalDistance: _toDouble(item['total_distance']),
+                  avgHeartRate: _toDoubleNullable(item['avg_heart_rate']),
+                ));
+              }
             } catch (e) {
               debugPrint('Error parsing weekly stats item: $e');
             }
@@ -636,15 +654,21 @@ class WorkoutDetailService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         List<Map<String, dynamic>> stats = [];
+        final Set<String> addedDates = {};
+        
         if (data is List) {
           for (var item in data) {
-            stats.add({
-              'date': item['date'],
-              'workout_count': _toInt(item['workout_count']),
-              'total_duration': _toInt(item['total_duration']),
-              'total_calories': _toInt(item['total_calories']),
-              'total_distance': _toDouble(item['total_distance']),
-            });
+            final date = item['date'];
+            if (!addedDates.contains(date)) {
+              addedDates.add(date);
+              stats.add({
+                'date': date,
+                'workout_count': _toInt(item['workout_count']),
+                'total_duration': _toInt(item['total_duration']),
+                'total_calories': _toInt(item['total_calories']),
+                'total_distance': _toDouble(item['total_distance']),
+              });
+            }
           }
         }
         return {
@@ -705,14 +729,20 @@ class WorkoutDetailService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         List<IntensityDistribution> distribution = [];
+        final Set<String> addedIntensities = {};
+        
         if (data is List) {
           for (var item in data) {
             try {
-              distribution.add(IntensityDistribution(
-                intensity: item['intensity']?.toString() ?? '',
-                count: _toInt(item['count']),
-                totalDuration: _toInt(item['total_duration']),
-              ));
+              final intensity = item['intensity']?.toString() ?? '';
+              if (!addedIntensities.contains(intensity)) {
+                addedIntensities.add(intensity);
+                distribution.add(IntensityDistribution(
+                  intensity: intensity,
+                  count: _toInt(item['count']),
+                  totalDuration: _toInt(item['total_duration']),
+                ));
+              }
             } catch (e) {
               debugPrint('Error parsing intensity item: $e');
             }
@@ -775,16 +805,22 @@ class WorkoutDetailService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         List<WorkoutTypeStats> stats = [];
+        final Set<String> addedWorkouts = {};
+        
         if (data is List) {
           for (var item in data) {
             try {
-              stats.add(WorkoutTypeStats(
-                workoutName: item['workout_name']?.toString() ?? '',
-                count: _toInt(item['count']),
-                totalDuration: _toInt(item['total_duration']),
-                totalCalories: _toInt(item['total_calories']),
-                avgHeartRate: _toDoubleNullable(item['avg_heart_rate']),
-              ));
+              final workoutName = item['workout_name']?.toString() ?? '';
+              if (!addedWorkouts.contains(workoutName)) {
+                addedWorkouts.add(workoutName);
+                stats.add(WorkoutTypeStats(
+                  workoutName: workoutName,
+                  count: _toInt(item['count']),
+                  totalDuration: _toInt(item['total_duration']),
+                  totalCalories: _toInt(item['total_calories']),
+                  avgHeartRate: _toDoubleNullable(item['avg_heart_rate']),
+                ));
+              }
             } catch (e) {
               debugPrint('Error parsing workout type stats item: $e');
             }
@@ -846,17 +882,22 @@ class WorkoutDetailService {
         }
 
         List<WeeklyWorkoutStats> weeklySummary = [];
+        final Set<String> addedWeeklyDates = {};
         if (data['weekly_summary'] != null && data['weekly_summary'] is List) {
           for (var item in data['weekly_summary']) {
             try {
-              weeklySummary.add(WeeklyWorkoutStats(
-                date: DateTime.parse(item['date'] as String),
-                workoutCount: _toInt(item['workout_count']),
-                totalDuration: _toInt(item['total_duration']),
-                totalCalories: _toInt(item['total_calories']),
-                totalDistance: _toDouble(item['total_distance']),
-                avgHeartRate: _toDoubleNullable(item['avg_heart_rate']),
-              ));
+              final date = item['date'] as String;
+              if (!addedWeeklyDates.contains(date)) {
+                addedWeeklyDates.add(date);
+                weeklySummary.add(WeeklyWorkoutStats(
+                  date: DateTime.parse(date),
+                  workoutCount: _toInt(item['workout_count']),
+                  totalDuration: _toInt(item['total_duration']),
+                  totalCalories: _toInt(item['total_calories']),
+                  totalDistance: _toDouble(item['total_distance']),
+                  avgHeartRate: _toDoubleNullable(item['avg_heart_rate']),
+                ));
+              }
             } catch (e) {
               debugPrint('Error parsing weekly summary item: $e');
             }
@@ -864,14 +905,19 @@ class WorkoutDetailService {
         }
 
         List<IntensityDistribution> intensityDistribution = [];
+        final Set<String> addedIntensities = {};
         if (data['intensity_distribution'] != null && data['intensity_distribution'] is List) {
           for (var item in data['intensity_distribution']) {
             try {
-              intensityDistribution.add(IntensityDistribution(
-                intensity: item['intensity']?.toString() ?? '',
-                count: _toInt(item['count']),
-                totalDuration: _toInt(item['total_duration']),
-              ));
+              final intensity = item['intensity']?.toString() ?? '';
+              if (!addedIntensities.contains(intensity)) {
+                addedIntensities.add(intensity);
+                intensityDistribution.add(IntensityDistribution(
+                  intensity: intensity,
+                  count: _toInt(item['count']),
+                  totalDuration: _toInt(item['total_duration']),
+                ));
+              }
             } catch (e) {
               debugPrint('Error parsing intensity item: $e');
             }
@@ -879,16 +925,21 @@ class WorkoutDetailService {
         }
 
         List<WorkoutTypeStats> topWorkouts = [];
+        final Set<String> addedTopWorkouts = {};
         if (data['top_workouts'] != null && data['top_workouts'] is List) {
           for (var item in data['top_workouts']) {
             try {
-              topWorkouts.add(WorkoutTypeStats(
-                workoutName: item['workout_name']?.toString() ?? '',
-                count: _toInt(item['count']),
-                totalDuration: _toInt(item['total_duration']),
-                totalCalories: _toInt(item['total_calories']),
-                avgHeartRate: _toDoubleNullable(item['avg_heart_rate']),
-              ));
+              final workoutName = item['workout_name']?.toString() ?? '';
+              if (!addedTopWorkouts.contains(workoutName)) {
+                addedTopWorkouts.add(workoutName);
+                topWorkouts.add(WorkoutTypeStats(
+                  workoutName: workoutName,
+                  count: _toInt(item['count']),
+                  totalDuration: _toInt(item['total_duration']),
+                  totalCalories: _toInt(item['total_calories']),
+                  avgHeartRate: _toDoubleNullable(item['avg_heart_rate']),
+                ));
+              }
             } catch (e) {
               debugPrint('Error parsing top workout item: $e');
             }

@@ -20,6 +20,7 @@ import '../widgets/add_sleep_dialog.dart';
 import '../widgets/add_hydration_dialog.dart';
 import '../widgets/add_medication_dialog.dart';
 import '../widgets/google_fit_connection_widget.dart';
+import '../widgets/edit_workout_dialog.dart';
 
 class ActivityTab extends StatefulWidget {
   const ActivityTab({super.key});
@@ -1190,6 +1191,8 @@ class _WorkoutDetailsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final workoutProvider = Provider.of<WorkoutDetailProvider>(context, listen: false);
+
     return Container(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -1312,7 +1315,7 @@ class _WorkoutDetailsSheet extends StatelessWidget {
                 child: ElevatedButton(
                   onPressed: () {
                     Navigator.pop(context);
-                    // TODO: Show edit workout dialog
+                    _showEditWorkoutDialog(context, workout, workoutProvider);
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
@@ -1328,6 +1331,21 @@ class _WorkoutDetailsSheet extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  void _showEditWorkoutDialog(BuildContext context, WorkoutDetail workout, WorkoutDetailProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => EditWorkoutDialog(
+        workout: workout,
+        workoutProvider: provider,
+        onUpdated: () {
+          provider.refreshCurrentDate();
+        },
       ),
     );
   }
