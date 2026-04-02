@@ -1,3 +1,4 @@
+// lib/screens/activity_tab.dart
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -5,9 +6,11 @@ import 'package:provider/provider.dart';
 import '../models/activity_models.dart';
 import '../models/meal_models.dart';
 import '../models/meal_request_models.dart';
+import '../models/workout_detail_models.dart';
 import '../providers/activity_provider.dart';
 import '../providers/meal_provider.dart';
 import '../providers/google_fit_provider.dart';
+import '../providers/workout_detail_provider.dart';
 import '../widgets/date_selector.dart';
 import '../widgets/progress_chart.dart';
 import '../widgets/activity_cards.dart';
@@ -36,8 +39,10 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     _tabController = TabController(length: 5, vsync: this);
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final provider = Provider.of<ActivityProvider>(context, listen: false);
-      provider.onShowMessage = (String message, {bool isError = false}) {
+      final activityProvider = Provider.of<ActivityProvider>(context, listen: false);
+      final workoutProvider = Provider.of<WorkoutDetailProvider>(context, listen: false);
+      
+      activityProvider.onShowMessage = (String message, {bool isError = false}) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -49,15 +54,31 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
         }
       };
       
-      provider.loadActivityData();
+      workoutProvider.onShowMessage = (String message, {bool isError = false}) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              backgroundColor: isError ? Colors.red : Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      };
+      
+      activityProvider.loadActivityData();
+      workoutProvider.loadAllData();
     });
   }
 
   @override
   void dispose() {
     try {
-      final provider = Provider.of<ActivityProvider>(context, listen: false);
-      provider.disposeCallbacks();
+      final activityProvider = Provider.of<ActivityProvider>(context, listen: false);
+      activityProvider.disposeCallbacks();
+      
+      final workoutProvider = Provider.of<WorkoutDetailProvider>(context, listen: false);
+      workoutProvider.disposeCallbacks();
     } catch (e) {}
     _tabController.dispose();
     super.dispose();
@@ -67,15 +88,23 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     setState(() {
       _selectedDate = date;
     });
-    final provider = Provider.of<ActivityProvider>(context, listen: false);
-    provider.setSelectedDate(date);
+    final activityProvider = Provider.of<ActivityProvider>(context, listen: false);
+    final workoutProvider = Provider.of<WorkoutDetailProvider>(context, listen: false);
+    
+    activityProvider.setSelectedDate(date);
+    workoutProvider.setSelectedDate(date);
   }
 
   Future<void> _refreshData() async {
     setState(() => _isRefreshing = true);
     
-    final provider = Provider.of<ActivityProvider>(context, listen: false);
-    await provider.refreshCurrentDate();
+    final activityProvider = Provider.of<ActivityProvider>(context, listen: false);
+    final workoutProvider = Provider.of<WorkoutDetailProvider>(context, listen: false);
+    
+    await Future.wait([
+      activityProvider.refreshCurrentDate(),
+      workoutProvider.refreshCurrentDate(),
+    ]);
     
     if (mounted) {
       setState(() => _isRefreshing = false);
@@ -231,9 +260,9 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
               );
             },
           ),
-          Consumer<ActivityProvider>(
-            builder: (context, provider, child) {
-              if (provider.isLoading && provider.meals.isEmpty) {
+          Consumer2<ActivityProvider, WorkoutDetailProvider>(
+            builder: (context, activityProvider, workoutProvider, child) {
+              if (activityProvider.isLoading && activityProvider.meals.isEmpty) {
                 return const Expanded(
                   child: Center(
                     child: CircularProgressIndicator(
@@ -268,15 +297,20 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
                         controller: _tabController,
                         children: [
                           MealsTab(
-                            activityProvider: provider,
+                            activityProvider: activityProvider,
                             mealProvider: Provider.of<MealProvider>(context),
                             selectedDate: _selectedDate,
                             onRefresh: _refreshData,
                           ),
-                          WorkoutsTab(provider: provider, onRefresh: _refreshData),
-                          SleepTab(provider: provider, onRefresh: _refreshData),
-                          HydrationTab(provider: provider, onRefresh: _refreshData),
-                          MedicationsTab(provider: provider, onRefresh: _refreshData),
+                          WorkoutsTab(
+                            activityProvider: activityProvider,
+                            workoutProvider: workoutProvider,
+                            selectedDate: _selectedDate,
+                            onRefresh: _refreshData,
+                          ),
+                          SleepTab(provider: activityProvider, onRefresh: _refreshData),
+                          HydrationTab(provider: activityProvider, onRefresh: _refreshData),
+                          MedicationsTab(provider: activityProvider, onRefresh: _refreshData),
                         ],
                       ),
                     ),
@@ -719,15 +753,34 @@ class MealsTab extends StatelessWidget {
 }
 
 class WorkoutsTab extends StatelessWidget {
-  final ActivityProvider provider;
+  final ActivityProvider activityProvider;
+  final WorkoutDetailProvider workoutProvider;
+  final DateTime selectedDate;
   final Future<void> Function() onRefresh;
 
-  const WorkoutsTab({super.key, required this.provider, required this.onRefresh});
+  const WorkoutsTab({
+    super.key,
+    required this.activityProvider,
+    required this.workoutProvider,
+    required this.selectedDate,
+    required this.onRefresh,
+  });
 
   @override
   Widget build(BuildContext context) {
+    // Load workouts when date changes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      workoutProvider.setSelectedDate(selectedDate);
+    });
+
+    final workouts = workoutProvider.workouts;
+    final dailyStats = workoutProvider.dailyStats;
+
     return RefreshIndicator(
-      onRefresh: onRefresh,
+      onRefresh: () async {
+        await workoutProvider.refreshCurrentDate();
+        await onRefresh();
+      },
       color: Colors.green,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -735,45 +788,35 @@ class WorkoutsTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Workout Duration',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${provider.totalWorkoutMinutes} / 60 minutes',
-                      style: const TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 200,
-                      child: ProgressChart.bar(
-                        data: provider.weeklyWorkoutMinutes,
-                        labels: const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
-                        color: Colors.green,
-                        title: 'Weekly Workouts',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
+            // Stats Cards
             Row(
               children: [
                 Expanded(
                   child: _buildStatCard(
-                    'Calories Burned',
-                    '${provider.totalCaloriesBurned}',
+                    'Workouts',
+                    '${workoutProvider.workoutCount}',
+                    Icons.fitness_center,
+                    Colors.green,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildStatCard(
+                    'Duration',
+                    '${workoutProvider.totalDuration} min',
+                    Icons.timer,
+                    Colors.blue,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatCard(
+                    'Calories',
+                    '${workoutProvider.totalCalories}',
                     Icons.local_fire_department,
                     Colors.orange,
                   ),
@@ -781,23 +824,123 @@ class WorkoutsTab extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: _buildStatCard(
-                    'Active Minutes',
-                    '${provider.totalWorkoutMinutes}',
-                    Icons.timer,
-                    Colors.green,
+                    'Distance',
+                    '${workoutProvider.totalDistance.toStringAsFixed(1)} km',
+                    Icons.straighten,
+                    Colors.purple,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
 
-            Text(
-              "Workouts for ${DateFormat('MMM d, yyyy').format(provider.selectedDate)}",
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            // Weekly Chart
+            if (workoutProvider.weeklyStats.isNotEmpty)
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Weekly Activity',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        height: 180,
+                        child: BarChart(
+                          BarChartData(
+                            alignment: BarChartAlignment.spaceAround,
+                            maxY: workoutProvider.getWeeklyDurationData().isEmpty
+                                ? 100
+                                : workoutProvider.getWeeklyDurationData().reduce((a, b) => a > b ? a : b) * 1.2,
+                            barTouchData: BarTouchData(
+                              enabled: true,
+                              touchTooltipData: BarTouchTooltipData(
+                                getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                                  return BarTooltipItem(
+                                    '${workoutProvider.getWeeklyDurationData()[group.x.toInt()].toInt()} min',
+                                    const TextStyle(color: Colors.white),
+                                  );
+                                },
+                              ),
+                            ),
+                            titlesData: FlTitlesData(
+                              show: true,
+                              bottomTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  getTitlesWidget: (value, meta) {
+                                    const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+                                    if (value.toInt() >= 0 && value.toInt() < days.length) {
+                                      return Text(days[value.toInt()], style: const TextStyle(fontSize: 12));
+                                    }
+                                    return const Text('');
+                                  },
+                                ),
+                              ),
+                              leftTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                              topTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                              rightTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                            ),
+                            borderData: FlBorderData(show: false),
+                            barGroups: List.generate(7, (index) {
+                              return BarChartGroupData(
+                                x: index,
+                                barRods: [
+                                  BarChartRodData(
+                                    toY: workoutProvider.getWeeklyDurationData()[index],
+                                    color: Colors.green,
+                                    width: 20,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ],
+                              );
+                            }),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            const SizedBox(height: 16),
+
+            // Workout List Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Workouts for ${DateFormat('MMM d, yyyy').format(selectedDate)}",
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  '${workouts.length} workouts',
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
-            
-            if (provider.workouts.isEmpty)
+
+            // Workout List
+            if (workoutProvider.isLoading && workouts.isEmpty)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: CircularProgressIndicator(color: Colors.green),
+                ),
+              )
+            else if (workouts.isEmpty)
               Center(
                 child: Padding(
                   padding: const EdgeInsets.all(32),
@@ -809,15 +952,17 @@ class WorkoutsTab extends StatelessWidget {
                         'No workouts logged for this day',
                         style: TextStyle(color: Colors.grey[600]),
                       ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Tap + to log your first workout',
+                        style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
               )
             else
-              ...provider.workouts.map((workout) => ActivityCard.workout(
-                workout: workout,
-                onTap: () => _showWorkoutDetails(context, workout),
-              )).toList(),
+              ...workouts.map((workout) => _buildWorkoutCard(context, workout)),
           ],
         ),
       ),
@@ -829,18 +974,28 @@ class WorkoutsTab extends StatelessWidget {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           children: [
-            Icon(icon, color: color, size: 28),
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
             const SizedBox(height: 8),
             Text(
               value,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              textAlign: TextAlign.center,
             ),
             Text(
               label,
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -848,48 +1003,367 @@ class WorkoutsTab extends StatelessWidget {
     );
   }
 
-  void _showWorkoutDetails(BuildContext context, Workout workout) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(workout.type),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
+  Widget _buildWorkoutCard(BuildContext context, WorkoutDetail workout) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        onTap: () => _showWorkoutDetails(context, workout),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: workout.intensityColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.fitness_center,
+                      color: workout.intensityColor,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          workout.displayName,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          '${workout.formattedTime} • ${workout.durationMinutes} min',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: workout.intensityColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      workout.intensityDisplay,
+                      style: TextStyle(
+                        color: workout.intensityColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  _buildWorkoutMetric(
+                    'Calories',
+                    '${workout.caloriesBurned ?? 0}',
+                    Icons.local_fire_department,
+                    Colors.orange,
+                  ),
+                  if (workout.distance != null && workout.distance! > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 16),
+                      child: _buildWorkoutMetric(
+                        'Distance',
+                        '${workout.distance!.toStringAsFixed(1)} km',
+                        Icons.straighten,
+                        Colors.blue,
+                      ),
+                    ),
+                  if (workout.heartRate != null && workout.heartRate! > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 16),
+                      child: _buildWorkoutMetric(
+                        'Heart Rate',
+                        '${workout.heartRate} bpm',
+                        Icons.favorite,
+                        Colors.red,
+                      ),
+                    ),
+                ],
+              ),
+              if (workout.feeling != null && workout.feeling!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: workout.feelingColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.sentiment_satisfied,
+                          size: 14,
+                          color: workout.feelingColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Feeling: ${workout.feelingDisplay}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: workout.feelingColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              if (workout.notes != null && workout.notes!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    workout.notes!,
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWorkoutMetric(String label, String value, IconData icon, Color color) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 4),
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildInfoRow('Time', workout.time),
-            _buildInfoRow('Duration', '${workout.duration} min'),
-            _buildInfoRow('Calories', '${workout.calories} kcal'),
-            _buildInfoRow('Intensity', workout.intensity),
-            if (workout.notes != null) _buildInfoRow('Notes', workout.notes!),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+            Text(
+              label,
+              style: TextStyle(fontSize: 9, color: Colors.grey[500]),
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+      ],
+    );
+  }
+
+  void _showWorkoutDetails(BuildContext context, WorkoutDetail workout) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => _WorkoutDetailsSheet(workout: workout),
+    );
+  }
+}
+
+class _WorkoutDetailsSheet extends StatelessWidget {
+  final WorkoutDetail workout;
+
+  const _WorkoutDetailsSheet({required this.workout});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: workout.intensityColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  Icons.fitness_center,
+                  color: workout.intensityColor,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      workout.displayName,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      DateFormat('EEEE, MMMM d, yyyy · h:mm a').format(workout.workoutTime),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const Divider(),
+          const SizedBox(height: 16),
+
+          // Details Grid
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 16,
+            childAspectRatio: 2,
+            children: [
+              _buildDetailTile('Duration', '${workout.durationMinutes} minutes', Icons.timer, Colors.blue),
+              _buildDetailTile('Calories', '${workout.caloriesBurned ?? 0} kcal', Icons.local_fire_department, Colors.orange),
+              if (workout.distance != null && workout.distance! > 0)
+                _buildDetailTile('Distance', '${workout.distance!.toStringAsFixed(2)} km', Icons.straighten, Colors.green),
+              if (workout.heartRate != null && workout.heartRate! > 0)
+                _buildDetailTile('Heart Rate', '${workout.heartRate} bpm', Icons.favorite, Colors.red),
+              _buildDetailTile('Intensity', workout.intensityDisplay, Icons.speed, workout.intensityColor),
+              if (workout.feeling != null && workout.feeling!.isNotEmpty)
+                _buildDetailTile('Feeling', workout.feelingDisplay, Icons.sentiment_satisfied, workout.feelingColor),
+            ],
+          ),
+
+          if (workout.notes != null && workout.notes!.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 12),
+            const Text(
+              'Notes',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                workout.notes!,
+                style: const TextStyle(fontSize: 14, height: 1.4),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 24),
+
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: const Text('Close'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    // TODO: Show edit workout dialog
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: const Text('Edit'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 70,
-            child: Text(
-              '$label:',
-              style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.grey),
-            ),
+  Widget _buildDetailTile(String label, String value, IconData icon, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
           ),
-          Expanded(child: Text(value)),
-        ],
-      ),
+          child: Icon(icon, size: 16, color: color),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                label,
+                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

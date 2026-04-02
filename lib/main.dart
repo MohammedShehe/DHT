@@ -1,3 +1,4 @@
+// lib/main.dart (Add WorkoutDetailProvider)
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +13,7 @@ import 'providers/notification_provider.dart';
 import 'providers/smart_reminder_provider.dart';
 import 'providers/meal_provider.dart';
 import 'providers/google_fit_provider.dart';
+import 'providers/workout_detail_provider.dart';  // ADD THIS
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -52,6 +54,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => SmartReminderProvider()),
         ChangeNotifierProvider(create: (_) => MealProvider()),
         ChangeNotifierProvider(create: (_) => GoogleFitProvider()),
+        ChangeNotifierProvider(create: (_) => WorkoutDetailProvider()), // ADD THIS
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
