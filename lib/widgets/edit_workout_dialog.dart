@@ -123,6 +123,12 @@ class _EditWorkoutDialogState extends State<EditWorkoutDialog> {
         Navigator.pop(context);
         widget.onUpdated();
       }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? 'Failed to update workout')),
+        );
+      }
     }
   }
 
@@ -154,6 +160,10 @@ class _EditWorkoutDialogState extends State<EditWorkoutDialog> {
       if (result['success'] && mounted) {
         Navigator.pop(context);
         widget.onUpdated();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? 'Failed to delete workout')),
+        );
       }
     }
   }
@@ -188,14 +198,22 @@ class _EditWorkoutDialogState extends State<EditWorkoutDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Container(
+        width: double.maxFinite,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle
+            Container(
+              margin: const EdgeInsets.only(top: 12),
               width: 40,
               height: 4,
               decoration: BoxDecoration(
@@ -203,238 +221,318 @@ class _EditWorkoutDialogState extends State<EditWorkoutDialog> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Edit Workout',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete, color: Colors.red),
-                onPressed: _isLoading ? null : _deleteWorkout,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Workout Type Selection
-          Row(
-            children: [
-              Expanded(
-                child: SwitchListTile(
-                  title: const Text('Custom Workout'),
-                  value: _useCustomWorkout,
-                  onChanged: _isLoading ? null : (value) {
-                    setState(() => _useCustomWorkout = value);
-                  },
-                  activeColor: Colors.green,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            ],
-          ),
-
-          if (_useCustomWorkout)
-            TextField(
-              controller: _customWorkoutNameController,
-              decoration: const InputDecoration(
-                labelText: 'Workout Name',
-                border: OutlineInputBorder(),
-              ),
-              enabled: !_isLoading,
-            )
-          else
-            FutureBuilder<List<WorkoutType>>(
-              future: _loadWorkoutTypes(),
-              builder: (context, snapshot) {
-                if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-                  return DropdownButtonFormField<int>(
-                    value: _selectedWorkoutTypeId,
-                    decoration: const InputDecoration(
-                      labelText: 'Workout Type',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: snapshot.data!.map((type) {
-                      return DropdownMenuItem(
-                        value: type.id,
-                        child: Text(type.name),
-                      );
-                    }).toList(),
-                    onChanged: _isLoading ? null : (value) {
-                      setState(() => _selectedWorkoutTypeId = value);
-                    },
-                  );
-                }
-                return const SizedBox();
-              },
-            ),
-
-          const SizedBox(height: 16),
-
-          // Date and Time
-          InkWell(
-            onTap: _isLoading ? null : _selectDateTime,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[400]!),
-                borderRadius: BorderRadius.circular(8),
-              ),
+            
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Icon(Icons.calendar_today, color: Colors.grey),
-                  const SizedBox(width: 12),
-                  Text(
-                    DateFormat('MMM d, yyyy · h:mm a').format(_selectedDateTime),
-                    style: const TextStyle(fontSize: 16),
+                  const Text(
+                    'Edit Workout',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: _isLoading ? null : _deleteWorkout,
                   ),
                 ],
               ),
             ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Duration
-          TextField(
-            controller: _durationController,
-            decoration: const InputDecoration(
-              labelText: 'Duration (minutes)',
-              border: OutlineInputBorder(),
-            ),
-            keyboardType: TextInputType.number,
-            enabled: !_isLoading,
-          ),
-
-          const SizedBox(height: 16),
-
-          // Distance
-          TextField(
-            controller: _distanceController,
-            decoration: const InputDecoration(
-              labelText: 'Distance (km)',
-              border: OutlineInputBorder(),
-            ),
-            keyboardType: TextInputType.number,
-            enabled: !_isLoading,
-          ),
-
-          const SizedBox(height: 16),
-
-          // Heart Rate
-          TextField(
-            controller: _heartRateController,
-            decoration: const InputDecoration(
-              labelText: 'Heart Rate (bpm)',
-              border: OutlineInputBorder(),
-            ),
-            keyboardType: TextInputType.number,
-            enabled: !_isLoading,
-          ),
-
-          const SizedBox(height: 16),
-
-          // Intensity
-          DropdownButtonFormField<String>(
-            value: _selectedIntensity,
-            decoration: const InputDecoration(
-              labelText: 'Intensity',
-              border: OutlineInputBorder(),
-            ),
-            items: _intensityOptions.map((intensity) {
-              return DropdownMenuItem(
-                value: intensity,
-                child: Text(intensity[0].toUpperCase() + intensity.substring(1)),
-              );
-            }).toList(),
-            onChanged: _isLoading ? null : (value) {
-              setState(() => _selectedIntensity = value!);
-            },
-          ),
-
-          const SizedBox(height: 16),
-
-          // Feeling
-          DropdownButtonFormField<String?>(
-            value: _selectedFeeling,
-            decoration: const InputDecoration(
-              labelText: 'How did you feel?',
-              border: OutlineInputBorder(),
-            ),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('Not recorded')),
-              ..._feelingOptions.map((feeling) {
-                String display = feeling.split('_').map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
-                return DropdownMenuItem(
-                  value: feeling,
-                  child: Text(display),
-                );
-              }),
-            ],
-            onChanged: _isLoading ? null : (value) {
-              setState(() => _selectedFeeling = value);
-            },
-          ),
-
-          const SizedBox(height: 16),
-
-          // Notes
-          TextField(
-            controller: _notesController,
-            decoration: const InputDecoration(
-              labelText: 'Notes',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 3,
-            enabled: !_isLoading,
-          ),
-
-          const SizedBox(height: 24),
-
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _isLoading ? null : () => Navigator.pop(context),
-                  style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+            
+            // Scrollable content
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Workout Type Selection
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: SwitchListTile(
+                        title: const Text(
+                          'Custom Workout',
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        value: _useCustomWorkout,
+                        onChanged: _isLoading ? null : (value) {
+                          setState(() => _useCustomWorkout = value);
+                        },
+                        activeColor: Colors.green,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: const Text('Cancel'),
+                    
+                    const SizedBox(height: 16),
+                    
+                    if (_useCustomWorkout)
+                      TextField(
+                        controller: _customWorkoutNameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Workout Name',
+                          hintText: 'e.g., Morning Run, Evening Yoga',
+                          border: OutlineInputBorder(),
+                          filled: true,
+                          fillColor: Colors.white,
+                        ),
+                        enabled: !_isLoading,
+                      )
+                    else
+                      FutureBuilder<List<WorkoutType>>(
+                        future: _loadWorkoutTypes(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16),
+                                child: CircularProgressIndicator(),
+                              ),
+                            );
+                          }
+                          if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                            return DropdownButtonFormField<int>(
+                              value: _selectedWorkoutTypeId,
+                              decoration: const InputDecoration(
+                                labelText: 'Workout Type',
+                                border: OutlineInputBorder(),
+                                filled: true,
+                                fillColor: Colors.white,
+                              ),
+                              items: snapshot.data!.map((type) {
+                                return DropdownMenuItem(
+                                  value: type.id,
+                                  child: Text(type.name),
+                                );
+                              }).toList(),
+                              onChanged: _isLoading ? null : (value) {
+                                setState(() => _selectedWorkoutTypeId = value);
+                              },
+                            );
+                          }
+                          return Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Center(
+                              child: Text('No workout types available'),
+                            ),
+                          );
+                        },
+                      ),
+                  
+                    const SizedBox(height: 16),
+                  
+                    // Date and Time
+                    InkWell(
+                      onTap: _isLoading ? null : _selectDateTime,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(12),
+                          color: Colors.white,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_today, color: Colors.grey, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                DateFormat('MMM d, yyyy · h:mm a').format(_selectedDateTime),
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                            ),
+                            const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                    ),
+                  
+                    const SizedBox(height: 16),
+                  
+                    // Duration
+                    TextField(
+                      controller: _durationController,
+                      decoration: const InputDecoration(
+                        labelText: 'Duration (minutes)',
+                        hintText: 'e.g., 30',
+                        border: OutlineInputBorder(),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                      keyboardType: TextInputType.number,
+                      enabled: !_isLoading,
+                    ),
+                  
+                    const SizedBox(height: 16),
+                  
+                    // Distance
+                    TextField(
+                      controller: _distanceController,
+                      decoration: const InputDecoration(
+                        labelText: 'Distance (km)',
+                        hintText: 'e.g., 5.2',
+                        border: OutlineInputBorder(),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                      keyboardType: TextInputType.number,
+                      enabled: !_isLoading,
+                    ),
+                  
+                    const SizedBox(height: 16),
+                  
+                    // Heart Rate
+                    TextField(
+                      controller: _heartRateController,
+                      decoration: const InputDecoration(
+                        labelText: 'Heart Rate (bpm)',
+                        hintText: 'e.g., 145',
+                        border: OutlineInputBorder(),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                      keyboardType: TextInputType.number,
+                      enabled: !_isLoading,
+                    ),
+                  
+                    const SizedBox(height: 16),
+                  
+                    // Intensity
+                    DropdownButtonFormField<String>(
+                      value: _selectedIntensity,
+                      decoration: const InputDecoration(
+                        labelText: 'Intensity',
+                        border: OutlineInputBorder(),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                      items: _intensityOptions.map((intensity) {
+                        String display = intensity[0].toUpperCase() + intensity.substring(1).replaceAll('_', ' ');
+                        return DropdownMenuItem(
+                          value: intensity,
+                          child: Text(display),
+                        );
+                      }).toList(),
+                      onChanged: _isLoading ? null : (value) {
+                        setState(() => _selectedIntensity = value!);
+                      },
+                    ),
+                  
+                    const SizedBox(height: 16),
+                  
+                    // Feeling
+                    DropdownButtonFormField<String?>(
+                      value: _selectedFeeling,
+                      decoration: const InputDecoration(
+                        labelText: 'How did you feel?',
+                        border: OutlineInputBorder(),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('Not recorded')),
+                        ..._feelingOptions.map((feeling) {
+                          String display = feeling.split('_').map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
+                          return DropdownMenuItem(
+                            value: feeling,
+                            child: Text(display),
+                          );
+                        }),
+                      ],
+                      onChanged: _isLoading ? null : (value) {
+                        setState(() => _selectedFeeling = value);
+                      },
+                    ),
+                  
+                    const SizedBox(height: 16),
+                  
+                    // Notes
+                    TextField(
+                      controller: _notesController,
+                      decoration: const InputDecoration(
+                        labelText: 'Notes',
+                        hintText: 'Add any additional notes about your workout...',
+                        border: OutlineInputBorder(),
+                        filled: true,
+                        fillColor: Colors.white,
+                        alignLabelWithHint: true,
+                      ),
+                      maxLines: 3,
+                      enabled: !_isLoading,
+                    ),
+                  
+                    const SizedBox(height: 24),
+                  ],
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _updateWorkout,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('Update'),
+            ),
+            
+            // Bottom buttons
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  top: BorderSide(color: Colors.grey[200]!),
                 ),
               ),
-            ],
-          ),
-        ],
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isLoading ? null : () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: BorderSide(color: Colors.grey[400]!),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _updateWorkout,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Update',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
