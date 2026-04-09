@@ -1,4 +1,3 @@
-// lib/providers/workout_detail_provider.dart
 import 'package:flutter/material.dart';
 import '../models/workout_detail_models.dart';
 import '../services/workout_detail_service.dart';
@@ -16,10 +15,8 @@ class WorkoutDetailProvider extends ChangeNotifier {
   String? _error;
   DateTime _selectedDate = DateTime.now();
 
-  // Callback for showing messages
   Function(String message, {bool isError})? onShowMessage;
 
-  // Getters
   List<WorkoutType> get workoutTypes => _workoutTypes;
   List<WorkoutDetail> get workouts => _workouts;
   WorkoutStats? get dailyStats => _dailyStats;
@@ -37,20 +34,22 @@ class WorkoutDetailProvider extends ChangeNotifier {
   int get workoutCount => _workouts.length;
 
   void setSelectedDate(DateTime date) {
-    if (_selectedDate.year == date.year && 
-        _selectedDate.month == date.month && 
-        _selectedDate.day == date.day) {
+    // Normalize date to start of day in local timezone
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+    
+    if (_selectedDate.year == normalizedDate.year && 
+        _selectedDate.month == normalizedDate.month && 
+        _selectedDate.day == normalizedDate.day) {
       return;
     }
     
-    _selectedDate = date;
+    _selectedDate = normalizedDate;
     _workouts = [];
-    loadWorkoutsForDate(date);
-    loadDailyStats(date);
+    loadWorkoutsForDate(normalizedDate);
+    loadDailyStats(normalizedDate);
     notifyListeners();
   }
 
-  // Load all data
   Future<void> loadAllData() async {
     _isLoading = true;
     notifyListeners();
@@ -73,7 +72,6 @@ class WorkoutDetailProvider extends ChangeNotifier {
     }
   }
 
-  // Load workout types
   Future<void> loadWorkoutTypes() async {
     final result = await WorkoutDetailService.getWorkoutTypes();
     
@@ -85,11 +83,11 @@ class WorkoutDetailProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Load workouts for specific date
   Future<void> loadWorkoutsForDate(DateTime date) async {
     _isLoadingWorkouts = true;
     notifyListeners();
 
+    // Use date range that covers the entire day in local timezone
     final startDate = DateTime(date.year, date.month, date.day);
     final endDate = DateTime(date.year, date.month, date.day, 23, 59, 59);
     
@@ -101,6 +99,8 @@ class WorkoutDetailProvider extends ChangeNotifier {
     _isLoadingWorkouts = false;
     if (result['success']) {
       _workouts = result['workouts'];
+      // Sort workouts by time (most recent first)
+      _workouts.sort((a, b) => b.workoutTime.compareTo(a.workoutTime));
       _error = null;
     } else {
       _error = result['message'];
@@ -108,26 +108,31 @@ class WorkoutDetailProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Load daily stats
   Future<void> loadDailyStats(DateTime date) async {
     final result = await WorkoutDetailService.getDailyStats(date);
     
     if (result['success']) {
       _dailyStats = result['stats'];
     } else {
-      // Don't set error for stats, just log
       debugPrint('Failed to load daily stats: ${result['message']}');
     }
     notifyListeners();
   }
 
-  // Load weekly stats
   Future<void> loadWeeklyStats({DateTime? startDate}) async {
-    final date = startDate ?? DateTime.now().subtract(const Duration(days: 6));
+    // Calculate start of week (Monday) in local timezone
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final daysToSubtract = today.weekday - 1; // Monday = 1, subtract to get Monday
+    final startOfWeek = today.subtract(Duration(days: daysToSubtract));
+    
+    final date = startDate ?? startOfWeek;
     final result = await WorkoutDetailService.getWeeklyStats(date);
     
     if (result['success']) {
       _weeklyStats = result['stats'];
+      // Sort by date
+      _weeklyStats.sort((a, b) => a.date.compareTo(b.date));
     } else {
       debugPrint('Failed to load weekly stats: ${result['message']}');
       _weeklyStats = [];
@@ -135,7 +140,6 @@ class WorkoutDetailProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Load intensity distribution
   Future<void> loadIntensityDistribution({DateTime? startDate, DateTime? endDate}) async {
     final result = await WorkoutDetailService.getIntensityDistribution(
       startDate: startDate,
@@ -151,7 +155,6 @@ class WorkoutDetailProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Load workout type stats
   Future<void> loadWorkoutTypeStats({DateTime? startDate, DateTime? endDate}) async {
     final result = await WorkoutDetailService.getWorkoutTypeStats(
       startDate: startDate,
@@ -167,7 +170,6 @@ class WorkoutDetailProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Create custom workout type
   Future<Map<String, dynamic>> createWorkoutType(String name) async {
     _isLoading = true;
     notifyListeners();
@@ -190,7 +192,6 @@ class WorkoutDetailProvider extends ChangeNotifier {
     return result;
   }
 
-  // Delete custom workout type
   Future<Map<String, dynamic>> deleteWorkoutType(int typeId) async {
     _isLoading = true;
     notifyListeners();
@@ -209,7 +210,6 @@ class WorkoutDetailProvider extends ChangeNotifier {
     return result;
   }
 
-  // Log a workout
   Future<Map<String, dynamic>> logWorkout(CreateWorkoutRequest request) async {
     _isLoading = true;
     notifyListeners();
@@ -236,7 +236,6 @@ class WorkoutDetailProvider extends ChangeNotifier {
     return result;
   }
 
-  // Update workout
   Future<Map<String, dynamic>> updateWorkout(int id, UpdateWorkoutRequest request) async {
     _isLoading = true;
     notifyListeners();
@@ -259,7 +258,6 @@ class WorkoutDetailProvider extends ChangeNotifier {
     return result;
   }
 
-  // Delete workout
   Future<Map<String, dynamic>> deleteWorkout(int id) async {
     _isLoading = true;
     notifyListeners();
@@ -282,13 +280,11 @@ class WorkoutDetailProvider extends ChangeNotifier {
     return result;
   }
 
-  // Get workout by ID
   Future<WorkoutDetail?> getWorkoutById(int id) async {
     final result = await WorkoutDetailService.getWorkoutById(id);
     return result['success'] ? result['workout'] : null;
   }
 
-  // Refresh current date
   Future<void> refreshCurrentDate() async {
     await Future.wait([
       loadWorkoutsForDate(_selectedDate),
@@ -296,36 +292,40 @@ class WorkoutDetailProvider extends ChangeNotifier {
     ]);
   }
 
-  // Helper method to show messages
   void _showMessage(String message, {bool isError = false}) {
     if (onShowMessage != null) {
       onShowMessage!(message, isError: isError);
     }
   }
 
-  // Clean up
   void disposeCallbacks() {
     onShowMessage = null;
   }
 
-  // Get workouts for chart data - with safe empty handling
+  // Get weekly duration data for chart (Monday to Sunday)
   List<double> getWeeklyDurationData() {
-    final now = DateTime.now();
-    final startOfWeek = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
     final result = List<double>.filled(7, 0.0);
     
-    // If no weekly stats data, return zeros
     if (_weeklyStats.isEmpty) {
       return result;
     }
     
+    // Calculate start of week (Monday)
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final daysToSubtract = today.weekday - 1;
+    final startOfWeek = today.subtract(Duration(days: daysToSubtract));
+    
     for (int i = 0; i < 7; i++) {
-      final date = startOfWeek.add(Duration(days: i));
+      final targetDate = startOfWeek.add(Duration(days: i));
+      
       try {
         final dayStats = _weeklyStats.firstWhere(
-          (s) => s.date.year == date.year && s.date.month == date.month && s.date.day == date.day,
+          (s) => s.date.year == targetDate.year && 
+                 s.date.month == targetDate.month && 
+                 s.date.day == targetDate.day,
           orElse: () => WeeklyWorkoutStats(
-            date: date,
+            date: targetDate,
             workoutCount: 0,
             totalDuration: 0,
             totalCalories: 0,
@@ -342,22 +342,27 @@ class WorkoutDetailProvider extends ChangeNotifier {
   }
 
   List<double> getWeeklyCaloriesData() {
-    final now = DateTime.now();
-    final startOfWeek = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
     final result = List<double>.filled(7, 0.0);
     
-    // If no weekly stats data, return zeros
     if (_weeklyStats.isEmpty) {
       return result;
     }
     
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final daysToSubtract = today.weekday - 1;
+    final startOfWeek = today.subtract(Duration(days: daysToSubtract));
+    
     for (int i = 0; i < 7; i++) {
-      final date = startOfWeek.add(Duration(days: i));
+      final targetDate = startOfWeek.add(Duration(days: i));
+      
       try {
         final dayStats = _weeklyStats.firstWhere(
-          (s) => s.date.year == date.year && s.date.month == date.month && s.date.day == date.day,
+          (s) => s.date.year == targetDate.year && 
+                 s.date.month == targetDate.month && 
+                 s.date.day == targetDate.day,
           orElse: () => WeeklyWorkoutStats(
-            date: date,
+            date: targetDate,
             workoutCount: 0,
             totalDuration: 0,
             totalCalories: 0,
@@ -373,23 +378,28 @@ class WorkoutDetailProvider extends ChangeNotifier {
     return result;
   }
 
-  // Get weekly workout count data (for charts)
   List<double> getWeeklyWorkoutCountData() {
-    final now = DateTime.now();
-    final startOfWeek = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
     final result = List<double>.filled(7, 0.0);
     
     if (_weeklyStats.isEmpty) {
       return result;
     }
     
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final daysToSubtract = today.weekday - 1;
+    final startOfWeek = today.subtract(Duration(days: daysToSubtract));
+    
     for (int i = 0; i < 7; i++) {
-      final date = startOfWeek.add(Duration(days: i));
+      final targetDate = startOfWeek.add(Duration(days: i));
+      
       try {
         final dayStats = _weeklyStats.firstWhere(
-          (s) => s.date.year == date.year && s.date.month == date.month && s.date.day == date.day,
+          (s) => s.date.year == targetDate.year && 
+                 s.date.month == targetDate.month && 
+                 s.date.day == targetDate.day,
           orElse: () => WeeklyWorkoutStats(
-            date: date,
+            date: targetDate,
             workoutCount: 0,
             totalDuration: 0,
             totalCalories: 0,
@@ -433,7 +443,6 @@ class WorkoutDetailProvider extends ChangeNotifier {
     }
   }
 
-  // Reset all data (useful for logout)
   void reset() {
     _workoutTypes = [];
     _workouts = [];

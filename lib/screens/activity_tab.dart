@@ -835,7 +835,7 @@ class WorkoutsTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // Weekly Chart
+            // Weekly Chart - Fixed to use correct days (Monday to Sunday)
             if (workoutProvider.weeklyStats.isNotEmpty)
               Card(
                 elevation: 2,
@@ -849,6 +849,11 @@ class WorkoutsTab extends StatelessWidget {
                         'Weekly Activity',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Duration in minutes (Mon - Sun)',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
                       const SizedBox(height: 12),
                       SizedBox(
                         height: 180,
@@ -857,13 +862,14 @@ class WorkoutsTab extends StatelessWidget {
                             alignment: BarChartAlignment.spaceAround,
                             maxY: workoutProvider.getWeeklyDurationData().isEmpty
                                 ? 100
-                                : workoutProvider.getWeeklyDurationData().reduce((a, b) => a > b ? a : b) * 1.2,
+                                : (workoutProvider.getWeeklyDurationData().reduce((a, b) => a > b ? a : b) * 1.2).clamp(10, double.infinity),
                             barTouchData: BarTouchData(
                               enabled: true,
                               touchTooltipData: BarTouchTooltipData(
                                 getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                                  final duration = workoutProvider.getWeeklyDurationData()[group.x.toInt()];
                                   return BarTooltipItem(
-                                    '${workoutProvider.getWeeklyDurationData()[group.x.toInt()].toInt()} min',
+                                    '${duration.toInt()} min',
                                     const TextStyle(color: Colors.white),
                                   );
                                 },
@@ -877,7 +883,10 @@ class WorkoutsTab extends StatelessWidget {
                                   getTitlesWidget: (value, meta) {
                                     const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
                                     if (value.toInt() >= 0 && value.toInt() < days.length) {
-                                      return Text(days[value.toInt()], style: const TextStyle(fontSize: 12));
+                                      return Text(
+                                        days[value.toInt()],
+                                        style: const TextStyle(fontSize: 12),
+                                      );
                                     }
                                     return const Text('');
                                   },
@@ -901,7 +910,7 @@ class WorkoutsTab extends StatelessWidget {
                                   BarChartRodData(
                                     toY: workoutProvider.getWeeklyDurationData()[index],
                                     color: Colors.green,
-                                    width: 20,
+                                    width: 24,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                 ],

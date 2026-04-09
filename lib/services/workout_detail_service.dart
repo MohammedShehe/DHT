@@ -1,4 +1,3 @@
-// lib/services/workout_detail_service.dart
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -43,7 +42,6 @@ double? _toDoubleNullable(dynamic value) {
 class WorkoutDetailService {
   static String get baseUrl => '${ApiConfig.baseUrl}/workout-details';
 
-  // Check network connectivity
   static Future<bool> _checkNetwork() async {
     try {
       if (kIsWeb) return true;
@@ -54,7 +52,10 @@ class WorkoutDetailService {
     }
   }
 
-  // ===== WORKOUT TYPES =====
+  // Helper to format date for API (YYYY-MM-DD in local timezone)
+  static String _formatDateForApi(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
 
   static Future<Map<String, dynamic>> getWorkoutTypes() async {
     if (!await _checkNetwork()) {
@@ -75,7 +76,7 @@ class WorkoutDetailService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         List<WorkoutType> types = [];
-        final Set<int> addedIds = {}; // Track unique IDs to prevent duplicates
+        final Set<int> addedIds = {};
         
         if (data is List) {
           for (var item in data) {
@@ -202,8 +203,6 @@ class WorkoutDetailService {
     }
   }
 
-  // ===== WORKOUT LOGS =====
-
   static Future<Map<String, dynamic>> logWorkout(CreateWorkoutRequest request) async {
     if (!await _checkNetwork()) {
       return {
@@ -226,22 +225,7 @@ class WorkoutDetailService {
         WorkoutDetail? workout;
         if (data['workout'] != null) {
           final w = data['workout'];
-          workout = WorkoutDetail(
-            id: _toInt(w['id']),
-            workoutTypeId: _toIntNullable(w['workout_type_id']),
-            customWorkoutName: w['custom_workout_name']?.toString(),
-            workoutTime: DateTime.parse(w['workout_time'] as String),
-            durationMinutes: _toInt(w['duration_minutes']),
-            intensity: w['intensity']?.toString() ?? 'moderate',
-            distance: _toDoubleNullable(w['distance']),
-            heartRate: _toIntNullable(w['heart_rate']),
-            feeling: w['feeling']?.toString(),
-            notes: w['notes']?.toString(),
-            caloriesBurned: _toIntNullable(w['calories_burned']),
-            workoutTypeName: w['workout_type_name']?.toString(),
-            createdAt: DateTime.parse(w['created_at'] as String),
-            updatedAt: DateTime.parse(w['updated_at'] as String),
-          );
+          workout = WorkoutDetail.fromJson(w);
         }
         return {
           'success': true,
@@ -285,8 +269,9 @@ class WorkoutDetailService {
       String url = baseUrl;
       final params = <String, String>{};
       
-      if (startDate != null) params['start_date'] = startDate.toIso8601String().split('T')[0];
-      if (endDate != null) params['end_date'] = endDate.toIso8601String().split('T')[0];
+      // Format dates for API (YYYY-MM-DD)
+      if (startDate != null) params['start_date'] = _formatDateForApi(startDate);
+      if (endDate != null) params['end_date'] = _formatDateForApi(endDate);
       if (intensity != null) params['intensity'] = intensity;
       if (workoutTypeId != null) params['workout_type_id'] = workoutTypeId.toString();
       if (limit != null) params['limit'] = limit.toString();
@@ -304,7 +289,7 @@ class WorkoutDetailService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         List<WorkoutDetail> workouts = [];
-        final Set<int> addedIds = {}; // Track unique IDs
+        final Set<int> addedIds = {};
         
         if (data is List) {
           for (var w in data) {
@@ -312,28 +297,15 @@ class WorkoutDetailService {
               final id = _toInt(w['id']);
               if (!addedIds.contains(id)) {
                 addedIds.add(id);
-                workouts.add(WorkoutDetail(
-                  id: id,
-                  workoutTypeId: _toIntNullable(w['workout_type_id']),
-                  customWorkoutName: w['custom_workout_name']?.toString(),
-                  workoutTime: DateTime.parse(w['workout_time'] as String),
-                  durationMinutes: _toInt(w['duration_minutes']),
-                  intensity: w['intensity']?.toString() ?? 'moderate',
-                  distance: _toDoubleNullable(w['distance']),
-                  heartRate: _toIntNullable(w['heart_rate']),
-                  feeling: w['feeling']?.toString(),
-                  notes: w['notes']?.toString(),
-                  caloriesBurned: _toIntNullable(w['calories_burned']),
-                  workoutTypeName: w['workout_type_name']?.toString(),
-                  createdAt: DateTime.parse(w['created_at'] as String),
-                  updatedAt: DateTime.parse(w['updated_at'] as String),
-                ));
+                workouts.add(WorkoutDetail.fromJson(w));
               }
             } catch (e) {
               debugPrint('Error parsing workout: $e');
             }
           }
         }
+        // Sort by workout time descending (most recent first)
+        workouts.sort((a, b) => b.workoutTime.compareTo(a.workoutTime));
         return {
           'success': true,
           'workouts': workouts,
@@ -372,23 +344,7 @@ class WorkoutDetailService {
       );
 
       if (response.statusCode == 200) {
-        final w = json.decode(response.body);
-        final workout = WorkoutDetail(
-          id: _toInt(w['id']),
-          workoutTypeId: _toIntNullable(w['workout_type_id']),
-          customWorkoutName: w['custom_workout_name']?.toString(),
-          workoutTime: DateTime.parse(w['workout_time'] as String),
-          durationMinutes: _toInt(w['duration_minutes']),
-          intensity: w['intensity']?.toString() ?? 'moderate',
-          distance: _toDoubleNullable(w['distance']),
-          heartRate: _toIntNullable(w['heart_rate']),
-          feeling: w['feeling']?.toString(),
-          notes: w['notes']?.toString(),
-          caloriesBurned: _toIntNullable(w['calories_burned']),
-          workoutTypeName: w['workout_type_name']?.toString(),
-          createdAt: DateTime.parse(w['created_at'] as String),
-          updatedAt: DateTime.parse(w['updated_at'] as String),
-        );
+        final workout = WorkoutDetail.fromJson(json.decode(response.body));
         return {
           'success': true,
           'workout': workout,
@@ -438,23 +394,7 @@ class WorkoutDetailService {
       if (response.statusCode == 200) {
         WorkoutDetail? workout;
         if (data['workout'] != null) {
-          final w = data['workout'];
-          workout = WorkoutDetail(
-            id: _toInt(w['id']),
-            workoutTypeId: _toIntNullable(w['workout_type_id']),
-            customWorkoutName: w['custom_workout_name']?.toString(),
-            workoutTime: DateTime.parse(w['workout_time'] as String),
-            durationMinutes: _toInt(w['duration_minutes']),
-            intensity: w['intensity']?.toString() ?? 'moderate',
-            distance: _toDoubleNullable(w['distance']),
-            heartRate: _toIntNullable(w['heart_rate']),
-            feeling: w['feeling']?.toString(),
-            notes: w['notes']?.toString(),
-            caloriesBurned: _toIntNullable(w['calories_burned']),
-            workoutTypeName: w['workout_type_name']?.toString(),
-            createdAt: DateTime.parse(w['created_at'] as String),
-            updatedAt: DateTime.parse(w['updated_at'] as String),
-          );
+          workout = WorkoutDetail.fromJson(data['workout']);
         }
         return {
           'success': true,
@@ -513,8 +453,6 @@ class WorkoutDetailService {
     }
   }
 
-  // ===== STATS ENDPOINTS =====
-
   static Future<Map<String, dynamic>> getDailyStats(DateTime date) async {
     if (!await _checkNetwork()) {
       return {
@@ -526,7 +464,7 @@ class WorkoutDetailService {
 
     try {
       final headers = await AuthService.getAuthHeaders();
-      final formattedDate = date.toIso8601String().split('T')[0];
+      final formattedDate = _formatDateForApi(date);
       final response = await http.get(
         Uri.parse('$baseUrl/stats/daily?date=$formattedDate'),
         headers: headers,
@@ -578,7 +516,7 @@ class WorkoutDetailService {
 
     try {
       final headers = await AuthService.getAuthHeaders();
-      final formattedDate = startDate.toIso8601String().split('T')[0];
+      final formattedDate = _formatDateForApi(startDate);
       final response = await http.get(
         Uri.parse('$baseUrl/stats/weekly?start_date=$formattedDate'),
         headers: headers,
@@ -587,28 +525,23 @@ class WorkoutDetailService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         List<WeeklyWorkoutStats> stats = [];
-        final Set<String> addedDates = {}; // Track unique dates
+        final Set<String> addedDates = {};
         
         if (data is List) {
           for (var item in data) {
             try {
-              final date = item['date'] as String;
-              if (!addedDates.contains(date)) {
-                addedDates.add(date);
-                stats.add(WeeklyWorkoutStats(
-                  date: DateTime.parse(date),
-                  workoutCount: _toInt(item['workout_count']),
-                  totalDuration: _toInt(item['total_duration']),
-                  totalCalories: _toInt(item['total_calories']),
-                  totalDistance: _toDouble(item['total_distance']),
-                  avgHeartRate: _toDoubleNullable(item['avg_heart_rate']),
-                ));
+              final dateStr = item['date'] as String;
+              if (!addedDates.contains(dateStr)) {
+                addedDates.add(dateStr);
+                stats.add(WeeklyWorkoutStats.fromJson(item));
               }
             } catch (e) {
               debugPrint('Error parsing weekly stats item: $e');
             }
           }
         }
+        // Sort by date
+        stats.sort((a, b) => a.date.compareTo(b.date));
         return {
           'success': true,
           'stats': stats,
@@ -714,8 +647,8 @@ class WorkoutDetailService {
       String url = '$baseUrl/stats/intensity';
       final params = <String, String>{};
       
-      if (startDate != null) params['start_date'] = startDate.toIso8601String().split('T')[0];
-      if (endDate != null) params['end_date'] = endDate.toIso8601String().split('T')[0];
+      if (startDate != null) params['start_date'] = _formatDateForApi(startDate);
+      if (endDate != null) params['end_date'] = _formatDateForApi(endDate);
       
       if (params.isNotEmpty) {
         url += '?${params.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}';
@@ -790,8 +723,8 @@ class WorkoutDetailService {
       String url = '$baseUrl/stats/workout-types';
       final params = <String, String>{};
       
-      if (startDate != null) params['start_date'] = startDate.toIso8601String().split('T')[0];
-      if (endDate != null) params['end_date'] = endDate.toIso8601String().split('T')[0];
+      if (startDate != null) params['start_date'] = _formatDateForApi(startDate);
+      if (endDate != null) params['end_date'] = _formatDateForApi(endDate);
       
       if (params.isNotEmpty) {
         url += '?${params.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}';
@@ -886,23 +819,17 @@ class WorkoutDetailService {
         if (data['weekly_summary'] != null && data['weekly_summary'] is List) {
           for (var item in data['weekly_summary']) {
             try {
-              final date = item['date'] as String;
-              if (!addedWeeklyDates.contains(date)) {
-                addedWeeklyDates.add(date);
-                weeklySummary.add(WeeklyWorkoutStats(
-                  date: DateTime.parse(date),
-                  workoutCount: _toInt(item['workout_count']),
-                  totalDuration: _toInt(item['total_duration']),
-                  totalCalories: _toInt(item['total_calories']),
-                  totalDistance: _toDouble(item['total_distance']),
-                  avgHeartRate: _toDoubleNullable(item['avg_heart_rate']),
-                ));
+              final dateStr = item['date'] as String;
+              if (!addedWeeklyDates.contains(dateStr)) {
+                addedWeeklyDates.add(dateStr);
+                weeklySummary.add(WeeklyWorkoutStats.fromJson(item));
               }
             } catch (e) {
               debugPrint('Error parsing weekly summary item: $e');
             }
           }
         }
+        weeklySummary.sort((a, b) => a.date.compareTo(b.date));
 
         List<IntensityDistribution> intensityDistribution = [];
         final Set<String> addedIntensities = {};

@@ -1,4 +1,3 @@
-// lib/models/workout_detail_models.dart
 import 'package:flutter/material.dart';
 
 class WorkoutType {
@@ -83,7 +82,13 @@ class WorkoutDetail {
   }
 
   String get formattedTime {
-    return '${workoutTime.hour.toString().padLeft(2, '0')}:${workoutTime.minute.toString().padLeft(2, '0')}';
+    final localTime = workoutTime.toLocal();
+    return '${localTime.hour.toString().padLeft(2, '0')}:${localTime.minute.toString().padLeft(2, '0')}';
+  }
+
+  // Get the date in local timezone for consistent display
+  DateTime get localDate {
+    return DateTime(workoutTime.year, workoutTime.month, workoutTime.day);
   }
 
   Color get intensityColor {
@@ -151,11 +156,20 @@ class WorkoutDetail {
   }
 
   factory WorkoutDetail.fromJson(Map<String, dynamic> json) {
+    // Parse workout_time with proper timezone handling
+    DateTime workoutTime;
+    if (json['workout_time'] != null) {
+      // Parse as UTC and convert to local
+      workoutTime = DateTime.parse(json['workout_time'] as String).toLocal();
+    } else {
+      workoutTime = DateTime.now();
+    }
+
     return WorkoutDetail(
       id: _toInt(json['id']),
       workoutTypeId: _toIntNullable(json['workout_type_id']),
       customWorkoutName: json['custom_workout_name']?.toString(),
-      workoutTime: DateTime.parse(json['workout_time'] as String),
+      workoutTime: workoutTime,
       durationMinutes: _toInt(json['duration_minutes']),
       intensity: json['intensity']?.toString() ?? 'moderate',
       distance: _toDoubleNullable(json['distance']),
@@ -164,16 +178,29 @@ class WorkoutDetail {
       notes: json['notes']?.toString(),
       caloriesBurned: _toIntNullable(json['calories_burned']),
       workoutTypeName: json['workout_type_name']?.toString(),
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: json['created_at'] != null 
+          ? DateTime.parse(json['created_at'] as String).toLocal() 
+          : DateTime.now(),
+      updatedAt: json['updated_at'] != null 
+          ? DateTime.parse(json['updated_at'] as String).toLocal() 
+          : DateTime.now(),
     );
   }
 
   Map<String, dynamic> toJson() {
+    // Send time in UTC to server
+    final utcTime = DateTime.utc(
+      workoutTime.year,
+      workoutTime.month,
+      workoutTime.day,
+      workoutTime.hour,
+      workoutTime.minute,
+    );
+    
     return {
       'workout_type_id': workoutTypeId,
       'custom_workout_name': customWorkoutName,
-      'workout_time': workoutTime.toIso8601String(),
+      'workout_time': utcTime.toIso8601String(),
       'duration_minutes': durationMinutes,
       'intensity': intensity,
       'distance': distance,
@@ -212,10 +239,19 @@ class CreateWorkoutRequest {
   }
 
   Map<String, dynamic> toJson() {
+    // Send time in UTC to server
+    final utcTime = DateTime.utc(
+      workoutTime.year,
+      workoutTime.month,
+      workoutTime.day,
+      workoutTime.hour,
+      workoutTime.minute,
+    );
+    
     return {
       'workout_type_id': workoutTypeId,
       'custom_workout_name': customWorkoutName,
-      'workout_time': workoutTime.toIso8601String(),
+      'workout_time': utcTime.toIso8601String(),
       'duration_minutes': durationMinutes,
       'intensity': intensity,
       'distance': distance,
@@ -253,7 +289,16 @@ class UpdateWorkoutRequest {
     final json = <String, dynamic>{};
     if (workoutTypeId != null) json['workout_type_id'] = workoutTypeId;
     if (customWorkoutName != null) json['custom_workout_name'] = customWorkoutName;
-    if (workoutTime != null) json['workout_time'] = workoutTime!.toIso8601String();
+    if (workoutTime != null) {
+      final utcTime = DateTime.utc(
+        workoutTime!.year,
+        workoutTime!.month,
+        workoutTime!.day,
+        workoutTime!.hour,
+        workoutTime!.minute,
+      );
+      json['workout_time'] = utcTime.toIso8601String();
+    }
     if (durationMinutes != null) json['duration_minutes'] = durationMinutes;
     if (intensity != null) json['intensity'] = intensity;
     if (distance != null) json['distance'] = distance;
@@ -307,9 +352,33 @@ class WeeklyWorkoutStats {
     this.avgHeartRate,
   });
 
+  // Get the date in local timezone
+  DateTime get localDate {
+    return DateTime(date.year, date.month, date.day);
+  }
+
   factory WeeklyWorkoutStats.fromJson(Map<String, dynamic> json) {
+    // Parse date and convert to local date (ignore time)
+    DateTime parsedDate;
+    if (json['date'] != null) {
+      final dateStr = json['date'] as String;
+      // Handle YYYY-MM-DD format
+      if (dateStr.contains('T')) {
+        parsedDate = DateTime.parse(dateStr).toLocal();
+      } else {
+        final parts = dateStr.split('-');
+        parsedDate = DateTime(
+          int.parse(parts[0]),
+          int.parse(parts[1]),
+          int.parse(parts[2]),
+        );
+      }
+    } else {
+      parsedDate = DateTime.now();
+    }
+    
     return WeeklyWorkoutStats(
-      date: DateTime.parse(json['date'] as String),
+      date: parsedDate,
       workoutCount: _toInt(json['workout_count']),
       totalDuration: _toInt(json['total_duration']),
       totalCalories: _toInt(json['total_calories']),

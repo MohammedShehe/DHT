@@ -1,4 +1,3 @@
-// lib/widgets/add_workout_dialog.dart (Updated to use WorkoutDetailService)
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -49,7 +48,6 @@ class _AddWorkoutDialogState extends State<AddWorkoutDialog> {
   @override
   void initState() {
     super.initState();
-    // Load workout types when dialog opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<WorkoutDetailProvider>(context, listen: false);
       if (provider.workoutTypes.isEmpty) {
@@ -73,11 +71,17 @@ class _AddWorkoutDialogState extends State<AddWorkoutDialog> {
 
     setState(() => _isLoading = true);
 
-    final now = DateTime.now();
-    final selectedDate = widget.selectedDate ?? now;
+    // Get selected date (use local date)
+    final selectedDate = widget.selectedDate ?? DateTime.now();
+    final localDate = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+    
+    // Create workout time with local date and selected time
     final workoutTime = DateTime(
-      selectedDate.year, selectedDate.month, selectedDate.day,
-      _selectedTime.hour, _selectedTime.minute,
+      localDate.year,
+      localDate.month,
+      localDate.day,
+      _selectedTime.hour,
+      _selectedTime.minute,
     );
 
     final request = CreateWorkoutRequest(
@@ -136,7 +140,6 @@ class _AddWorkoutDialogState extends State<AddWorkoutDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Handle
                     Center(
                       child: Container(
                         width: 40,
