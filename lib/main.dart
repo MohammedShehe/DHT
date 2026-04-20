@@ -13,7 +13,8 @@ import 'providers/notification_provider.dart';
 import 'providers/smart_reminder_provider.dart';
 import 'providers/meal_provider.dart';
 import 'providers/google_fit_provider.dart';
-import 'providers/workout_detail_provider.dart';  // ADD THIS
+import 'providers/workout_detail_provider.dart';
+import 'providers/sleep_activity_provider.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -54,7 +55,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => SmartReminderProvider()),
         ChangeNotifierProvider(create: (_) => MealProvider()),
         ChangeNotifierProvider(create: (_) => GoogleFitProvider()),
-        ChangeNotifierProvider(create: (_) => WorkoutDetailProvider()), // ADD THIS
+        ChangeNotifierProvider(create: (_) => WorkoutDetailProvider()),
+        ChangeNotifierProvider(create: (_) => SleepActivityProvider()),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,

@@ -7,10 +7,12 @@ import '../models/activity_models.dart';
 import '../models/meal_models.dart';
 import '../models/meal_request_models.dart';
 import '../models/workout_detail_models.dart';
+import '../models/sleep_activity_models.dart';
 import '../providers/activity_provider.dart';
 import '../providers/meal_provider.dart';
 import '../providers/google_fit_provider.dart';
 import '../providers/workout_detail_provider.dart';
+import '../providers/sleep_activity_provider.dart';
 import '../widgets/date_selector.dart';
 import '../widgets/progress_chart.dart';
 import '../widgets/activity_cards.dart';
@@ -42,6 +44,7 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final activityProvider = Provider.of<ActivityProvider>(context, listen: false);
       final workoutProvider = Provider.of<WorkoutDetailProvider>(context, listen: false);
+      final sleepProvider = Provider.of<SleepActivityProvider>(context, listen: false);
       
       activityProvider.onShowMessage = (String message, {bool isError = false}) {
         if (mounted) {
@@ -67,8 +70,22 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
         }
       };
       
+      sleepProvider.onShowMessage = (String message, {bool isError = false}) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              backgroundColor: isError ? Colors.red : Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      };
+      
       activityProvider.loadActivityData();
       workoutProvider.loadAllData();
+      sleepProvider.loadSleepLogForDate(DateTime.now());
+      sleepProvider.loadAllStats();
     });
   }
 
@@ -91,9 +108,11 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     });
     final activityProvider = Provider.of<ActivityProvider>(context, listen: false);
     final workoutProvider = Provider.of<WorkoutDetailProvider>(context, listen: false);
+    final sleepProvider = Provider.of<SleepActivityProvider>(context, listen: false);
     
     activityProvider.setSelectedDate(date);
     workoutProvider.setSelectedDate(date);
+    sleepProvider.setSelectedDate(date);
   }
 
   Future<void> _refreshData() async {
@@ -101,10 +120,13 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     
     final activityProvider = Provider.of<ActivityProvider>(context, listen: false);
     final workoutProvider = Provider.of<WorkoutDetailProvider>(context, listen: false);
+    final sleepProvider = Provider.of<SleepActivityProvider>(context, listen: false);
     
     await Future.wait([
       activityProvider.refreshCurrentDate(),
       workoutProvider.refreshCurrentDate(),
+      sleepProvider.loadSleepLogForDate(_selectedDate),
+      sleepProvider.loadAllStats(),
     ]);
     
     if (mounted) {
@@ -261,8 +283,8 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
               );
             },
           ),
-          Consumer2<ActivityProvider, WorkoutDetailProvider>(
-            builder: (context, activityProvider, workoutProvider, child) {
+          Consumer3<ActivityProvider, WorkoutDetailProvider, SleepActivityProvider>(
+            builder: (context, activityProvider, workoutProvider, sleepProvider, child) {
               if (activityProvider.isLoading && activityProvider.meals.isEmpty) {
                 return const Expanded(
                   child: Center(
@@ -309,7 +331,7 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
                             selectedDate: _selectedDate,
                             onRefresh: _refreshData,
                           ),
-                          SleepTab(provider: activityProvider, onRefresh: _refreshData),
+                          SleepTab(onRefresh: _refreshData),
                           HydrationTab(provider: activityProvider, onRefresh: _refreshData),
                           MedicationsTab(provider: activityProvider, onRefresh: _refreshData),
                         ],
@@ -769,13 +791,11 @@ class WorkoutsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Load workouts when date changes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       workoutProvider.setSelectedDate(selectedDate);
     });
 
     final workouts = workoutProvider.workouts;
-    final dailyStats = workoutProvider.dailyStats;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -835,7 +855,7 @@ class WorkoutsTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // Weekly Chart - Fixed to use correct days (Monday to Sunday)
+            // Weekly Chart
             if (workoutProvider.weeklyStats.isNotEmpty)
               Card(
                 elevation: 2,
@@ -943,7 +963,7 @@ class WorkoutsTab extends StatelessWidget {
             const SizedBox(height: 12),
 
             // Workout List
-            if (workoutProvider.isLoading && workouts.isEmpty)
+            if (workoutProvider.isLoadingWorkouts && workouts.isEmpty)
               const Center(
                 child: Padding(
                   padding: EdgeInsets.all(32),
@@ -1396,222 +1416,322 @@ class _WorkoutDetailsSheet extends StatelessWidget {
 }
 
 class SleepTab extends StatelessWidget {
-  final ActivityProvider provider;
   final Future<void> Function() onRefresh;
 
-  const SleepTab({super.key, required this.provider, required this.onRefresh});
+  const SleepTab({super.key, required this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
-    final sleep = provider.sleep.isNotEmpty ? provider.sleep.first : null;
+    return Consumer<SleepActivityProvider>(
+      builder: (context, provider, child) {
+        final sleepLog = provider.currentSleepLog;
+        
+        return RefreshIndicator(
+          onRefresh: () async {
+            await provider.loadSleepLogForDate(provider.selectedDate);
+            await provider.loadAllStats();
+            await onRefresh();
+          },
+          color: Colors.purple,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Sleep Duration Card
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Sleep Duration',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${provider.getWeeklyDurationData().reduce((a, b) => a > b ? a : b).toStringAsFixed(1)} / 8 hours (peak)',
+                          style: const TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          height: 200,
+                          child: _buildWeeklySleepChart(provider),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Sleep Log for selected date
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Sleep for ${DateFormat('MMM d, yyyy').format(provider.selectedDate)}",
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    ),
+                    if (sleepLog != null)
+                      TextButton.icon(
+                        onPressed: () => _showEditSleepDialog(context, provider),
+                        icon: const Icon(Icons.edit, size: 16),
+                        label: const Text('Edit'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                if (provider.isLoading)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: CircularProgressIndicator(color: Colors.purple),
+                    ),
+                  )
+                else if (sleepLog != null)
+                  _buildSleepLogCard(context, sleepLog, provider)
+                else
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        children: [
+                          Icon(Icons.bedtime, size: 64, color: Colors.grey[300]),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No sleep data for this day',
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Tap + to log your sleep',
+                            style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildWeeklySleepChart(SleepActivityProvider provider) {
+    final durationData = provider.getWeeklyDurationData();
+    final labels = provider.getWeekLabels();
+    final maxDuration = durationData.isEmpty ? 8 : durationData.reduce((a, b) => a > b ? a : b);
     
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      color: Colors.purple,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
+    return SizedBox(
+      height: 180,
+      child: Row(
+        children: List.generate(7, (index) {
+          final barHeight = maxDuration > 0 ? ((durationData[index] / maxDuration) * 140).toDouble() : 0.0;
+          return Expanded(
+            child: Column(
+              children: [
+                Expanded(
+                  child: Container(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      width: 24,
+                      height: barHeight,
+                      decoration: BoxDecoration(
+                        color: durationData[index] > 0 ? Colors.purple : Colors.grey[300],
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  labels[index],
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: durationData[index] > 0 ? Colors.black : Colors.grey[500],
+                  ),
+                ),
+                Text(
+                  durationData[index].toStringAsFixed(1),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.purple,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildSleepLogCard(BuildContext context, SleepLog sleepLog, SleepActivityProvider provider) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: sleepLog.qualityColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.bedtime, color: sleepLog.qualityColor, size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${sleepLog.totalHours.toStringAsFixed(1)} hours',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: sleepLog.qualityColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            sleepLog.qualityDisplay,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: sleepLog.qualityColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                PopupMenuButton(
+                  icon: const Icon(Icons.more_vert),
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete, size: 20, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Delete', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onSelected: (value) {
+                    if (value == 'delete') {
+                      _showDeleteConfirmation(context, provider);
+                    }
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 12),
+            
+            // Bedtime and Wake time
+            Row(
+              children: [
+                Expanded(
+                  child: _buildTimeCard(
+                    'Bedtime',
+                    sleepLog.formattedBedtime,
+                    Icons.nightlight_round,
+                    Colors.indigo,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildTimeCard(
+                    'Wake up',
+                    sleepLog.formattedWakeTime,
+                    Icons.wb_sunny,
+                    Colors.orange,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            
+            // Interruptions
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.notifications, size: 20, color: Colors.grey[600]),
+                      const SizedBox(width: 8),
+                      const Text('Interruptions'),
+                    ],
+                  ),
+                  Text(
+                    '${sleepLog.interruptions} times',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+            
+            if (sleepLog.notes != null && sleepLog.notes!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Sleep Duration',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${provider.totalSleepHours.toStringAsFixed(1)} / 8 hours',
-                      style: const TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 200,
-                      child: ProgressChart.bar(
-                        data: provider.weeklySleepHours,
-                        labels: const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
-                        color: Colors.purple,
-                        title: 'Weekly Sleep',
+                    Icon(Icons.note, size: 16, color: Colors.grey[500]),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        sleepLog.notes!,
+                        style: TextStyle(fontSize: 13, color: Colors.grey[700]),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-
-            Text(
-              "Sleep for ${DateFormat('MMM d, yyyy').format(provider.selectedDate)}",
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-
-            if (sleep != null) ...[
-              Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Sleep Quality',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: _getSleepQualityColor(sleep.quality).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              sleep.quality,
-                              style: TextStyle(
-                                color: _getSleepQualityColor(sleep.quality),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      if (sleep.deepSleep != null)
-                        _buildSleepStageRow('Deep Sleep', sleep.deepSleep!, sleep.duration, Colors.purple),
-                      if (sleep.remSleep != null)
-                        _buildSleepStageRow('REM Sleep', sleep.remSleep!, sleep.duration, Colors.blue),
-                      if (sleep.lightSleep != null)
-                        _buildSleepStageRow('Light Sleep', sleep.lightSleep!, sleep.duration, Colors.green),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildSleepTimeCard(
-                              'Bedtime',
-                              '${sleep.bedTime.hour.toString().padLeft(2, '0')}:${sleep.bedTime.minute.toString().padLeft(2, '0')}',
-                              Icons.nightlight_round,
-                              Colors.indigo,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildSleepTimeCard(
-                              'Wake up',
-                              '${sleep.wakeTime.hour.toString().padLeft(2, '0')}:${sleep.wakeTime.minute.toString().padLeft(2, '0')}',
-                              Icons.wb_sunny,
-                              Colors.orange,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('Interruptions'),
-                            Text(
-                              '${sleep.interruptions} times',
-                              style: const TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ] else
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    children: [
-                      Icon(Icons.bedtime, size: 64, color: Colors.grey[300]),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No sleep data for this day',
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Color _getSleepQualityColor(String quality) {
-    switch (quality.toLowerCase()) {
-      case 'excellent':
-        return Colors.green;
-      case 'good':
-        return Colors.blue;
-      case 'fair':
-        return Colors.orange;
-      case 'poor':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  Widget _buildSleepStageRow(String label, double hours, double total, Color color) {
-    final percentage = total > 0 ? (hours / total * 100).round() : 0;
-    
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(label, style: TextStyle(color: Colors.grey[600])),
-              Text('${hours.toStringAsFixed(1)}h ($percentage%)'),
-            ],
-          ),
-          const SizedBox(height: 4),
-          LinearProgressIndicator(
-            value: total > 0 ? hours / total : 0,
-            backgroundColor: color.withOpacity(0.2),
-            color: color,
-            borderRadius: BorderRadius.circular(4),
-            minHeight: 6,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSleepTimeCard(String label, String time, IconData icon, Color color) {
+  Widget _buildTimeCard(String label, String time, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1629,6 +1749,45 @@ class SleepTab extends StatelessWidget {
           Text(
             label,
             style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditSleepDialog(BuildContext context, SleepActivityProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AddSleepDialog(
+        selectedDate: provider.selectedDate,
+        existingSleepLog: provider.currentSleepLog,
+      ),
+    ).then((_) {
+      provider.loadSleepLogForDate(provider.selectedDate);
+      provider.loadAllStats();
+    });
+  }
+
+  void _showDeleteConfirmation(BuildContext context, SleepActivityProvider provider) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Sleep Log'),
+        content: const Text('Are you sure you want to delete this sleep log? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await provider.deleteCurrentSleepLog();
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
           ),
         ],
       ),
