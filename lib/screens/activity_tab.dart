@@ -8,11 +8,13 @@ import '../models/meal_models.dart';
 import '../models/meal_request_models.dart';
 import '../models/workout_detail_models.dart';
 import '../models/sleep_activity_models.dart';
+import '../models/hydration_models.dart';
 import '../providers/activity_provider.dart';
 import '../providers/meal_provider.dart';
 import '../providers/google_fit_provider.dart';
 import '../providers/workout_detail_provider.dart';
 import '../providers/sleep_activity_provider.dart';
+import '../providers/hydration_provider.dart';
 import '../widgets/date_selector.dart';
 import '../widgets/progress_chart.dart';
 import '../widgets/activity_cards.dart';
@@ -45,6 +47,7 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
       final activityProvider = Provider.of<ActivityProvider>(context, listen: false);
       final workoutProvider = Provider.of<WorkoutDetailProvider>(context, listen: false);
       final sleepProvider = Provider.of<SleepActivityProvider>(context, listen: false);
+      final hydrationProvider = Provider.of<HydrationProvider>(context, listen: false);
       
       activityProvider.onShowMessage = (String message, {bool isError = false}) {
         if (mounted) {
@@ -82,10 +85,23 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
         }
       };
       
+      hydrationProvider.onShowMessage = (String message, {bool isError = false}) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              backgroundColor: isError ? Colors.red : Colors.blue,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      };
+      
       activityProvider.loadActivityData();
       workoutProvider.loadAllData();
       sleepProvider.loadSleepLogForDate(DateTime.now());
       sleepProvider.loadAllStats();
+      hydrationProvider.initialize();
     });
   }
 
@@ -97,6 +113,9 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
       
       final workoutProvider = Provider.of<WorkoutDetailProvider>(context, listen: false);
       workoutProvider.disposeCallbacks();
+      
+      final hydrationProvider = Provider.of<HydrationProvider>(context, listen: false);
+      hydrationProvider.disposeCallbacks();
     } catch (e) {}
     _tabController.dispose();
     super.dispose();
@@ -109,10 +128,12 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     final activityProvider = Provider.of<ActivityProvider>(context, listen: false);
     final workoutProvider = Provider.of<WorkoutDetailProvider>(context, listen: false);
     final sleepProvider = Provider.of<SleepActivityProvider>(context, listen: false);
+    final hydrationProvider = Provider.of<HydrationProvider>(context, listen: false);
     
     activityProvider.setSelectedDate(date);
     workoutProvider.setSelectedDate(date);
     sleepProvider.setSelectedDate(date);
+    hydrationProvider.setSelectedDate(date);
   }
 
   Future<void> _refreshData() async {
@@ -121,12 +142,16 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
     final activityProvider = Provider.of<ActivityProvider>(context, listen: false);
     final workoutProvider = Provider.of<WorkoutDetailProvider>(context, listen: false);
     final sleepProvider = Provider.of<SleepActivityProvider>(context, listen: false);
+    final hydrationProvider = Provider.of<HydrationProvider>(context, listen: false);
     
     await Future.wait([
       activityProvider.refreshCurrentDate(),
       workoutProvider.refreshCurrentDate(),
       sleepProvider.loadSleepLogForDate(_selectedDate),
       sleepProvider.loadAllStats(),
+      hydrationProvider.loadLogsForDate(_selectedDate),
+      hydrationProvider.loadDailyStats(_selectedDate),
+      hydrationProvider.loadWeeklyStats(),
     ]);
     
     if (mounted) {
@@ -168,11 +193,15 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
   }
 
   void _showAddHydrationDialog() {
+    final hydrationProvider = Provider.of<HydrationProvider>(context, listen: false);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => AddHydrationDialog(selectedDate: _selectedDate),
+      builder: (context) => AddHydrationDialog(
+        selectedDate: _selectedDate,
+        provider: hydrationProvider,
+      ),
     ).then((_) => _refreshData());
   }
 
@@ -283,8 +312,8 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
               );
             },
           ),
-          Consumer3<ActivityProvider, WorkoutDetailProvider, SleepActivityProvider>(
-            builder: (context, activityProvider, workoutProvider, sleepProvider, child) {
+          Consumer4<ActivityProvider, WorkoutDetailProvider, SleepActivityProvider, HydrationProvider>(
+            builder: (context, activityProvider, workoutProvider, sleepProvider, hydrationProvider, child) {
               if (activityProvider.isLoading && activityProvider.meals.isEmpty) {
                 return const Expanded(
                   child: Center(
@@ -332,7 +361,10 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
                             onRefresh: _refreshData,
                           ),
                           SleepTab(onRefresh: _refreshData),
-                          HydrationTab(provider: activityProvider, onRefresh: _refreshData),
+                          HydrationTab(
+                            provider: hydrationProvider,
+                            onRefresh: _refreshData,
+                          ),
                           MedicationsTab(provider: activityProvider, onRefresh: _refreshData),
                         ],
                       ),
@@ -489,45 +521,6 @@ class MealsTab extends StatelessWidget {
                           ),
                         ),
                       ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.water_drop, color: Colors.blue, size: 30),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Water Intake',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${activityProvider.waterGlasses} / 8 glasses',
-                            style: TextStyle(color: Colors.grey[600]),
-                          ),
-                        ],
-                      ),
                     ),
                   ],
                 ),
@@ -1796,15 +1789,17 @@ class SleepTab extends StatelessWidget {
 }
 
 class HydrationTab extends StatelessWidget {
-  final ActivityProvider provider;
+  final HydrationProvider provider;
   final Future<void> Function() onRefresh;
 
-  const HydrationTab({super.key, required this.provider, required this.onRefresh});
+  const HydrationTab({
+    super.key,
+    required this.provider,
+    required this.onRefresh,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final goalAmount = 2500;
-    
     return RefreshIndicator(
       onRefresh: onRefresh,
       color: Colors.blue,
@@ -1814,119 +1809,75 @@ class HydrationTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Water Intake',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.water_drop, color: Colors.blue, size: 16),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${provider.waterGlasses} glasses',
-                                style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w600),
-                              ),
-                            ],
-                          ),
-                        ),
+            // Goal Card
+            _buildGoalCard(context),
+            const SizedBox(height: 16),
+            // Today's Progress Card
+            _buildProgressCard(),
+            const SizedBox(height: 16),
+            // Stats Tabs
+            DefaultTabController(
+              length: 3,
+              child: Column(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const TabBar(
+                      indicator: BoxDecoration(
+                        color: Colors.blue,
+                        borderRadius: BorderRadius.all(Radius.circular(12)),
+                      ),
+                      labelColor: Colors.white,
+                      unselectedLabelColor: Colors.grey,
+                      tabs: [
+                        Tab(text: 'Weekly', icon: Icon(Icons.calendar_view_week)),
+                        Tab(text: 'Distribution', icon: Icon(Icons.pie_chart)),
+                        Tab(text: 'Trends', icon: Icon(Icons.trending_up)),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    
-                    Center(
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          SizedBox(
-                            width: 180,
-                            height: 180,
-                            child: CircularProgressIndicator(
-                              value: goalAmount > 0 ? provider.totalWaterIntake / goalAmount : 0,
-                              backgroundColor: Colors.blue.withOpacity(0.1),
-                              color: Colors.blue,
-                              strokeWidth: 12,
-                            ),
-                          ),
-                          Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '${provider.totalWaterIntake}ml',
-                                style: const TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.blue,
-                                ),
-                              ),
-                              Text(
-                                'of ${goalAmount}ml',
-                                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 320,
+                    child: TabBarView(
+                      children: [
+                        _buildWeeklyStatsTab(),
+                        _buildDistributionTab(),
+                        _buildTrendsTab(),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-            
             const SizedBox(height: 16),
-            
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Weekly Hydration',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 200,
-                      child: ProgressChart.bar(
-                        data: provider.weeklyHydration,
-                        labels: const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
-                        color: Colors.blue,
-                        title: 'Weekly Hydration',
-                      ),
-                    ),
-                  ],
+            // Logs List Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Hydration for ${DateFormat('MMM d, yyyy').format(provider.selectedDate)}",
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                 ),
-              ),
-            ),
-            
-            const SizedBox(height: 16),
-            
-            Text(
-              "Hydration for ${DateFormat('MMM d, yyyy').format(provider.selectedDate)}",
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                Text(
+                  '${provider.logs.length} entries',
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
-            
-            if (provider.hydration.isEmpty)
+            // Logs List
+            if (provider.isLoadingLogs && provider.logs.isEmpty)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: CircularProgressIndicator(color: Colors.blue),
+                ),
+              )
+            else if (provider.logs.isEmpty)
               Center(
                 child: Padding(
                   padding: const EdgeInsets.all(32),
@@ -1938,55 +1889,731 @@ class HydrationTab extends StatelessWidget {
                         'No hydration entries for this day',
                         style: TextStyle(color: Colors.grey[600]),
                       ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Tap + to log your water intake',
+                        style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
               )
             else
-              ...provider.hydration.map((entry) => _buildHydrationEntryCard(context, entry, provider)).toList(),
+              ...provider.logs.map((log) => _buildHydrationEntryCard(log, context)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHydrationEntryCard(BuildContext context, Hydration entry, ActivityProvider provider) {
+  Widget _buildGoalCard(BuildContext context) {
+    final goal = provider.goal;
+    
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: Colors.blue.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Icon(Icons.water_drop, color: Colors.blue),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.flag, color: Colors.blue),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Daily Goal',
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                    Text(
+                      goal != null ? '${goal.dailyTargetMl} ml' : 'Not set',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                if (goal != null)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () => _showDeleteGoalConfirmation(context),
+                  ),
+                ElevatedButton.icon(
+                  onPressed: () => _showGoalDialog(context),
+                  icon: const Icon(Icons.edit, size: 16),
+                  label: Text(goal != null ? 'Edit Goal' : 'Set Goal'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-        title: Text('${entry.amount}ml ${entry.type ?? 'Water'}'),
-        subtitle: Text(DateFormat.jm().format(entry.time)),
-        trailing: PopupMenuButton(
-          icon: const Icon(Icons.more_vert),
-          itemBuilder: (context) => [
-            const PopupMenuItem(
-              value: 'delete',
-              child: Row(
-                children: [
-                  Icon(Icons.delete, color: Colors.red, size: 20),
-                  SizedBox(width: 8),
-                  Text('Delete'),
-                ],
+      ),
+    );
+  }
+
+  void _showDeleteGoalConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Goal'),
+        content: const Text('Are you sure you want to delete your hydration goal?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await provider.deleteGoal();
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showGoalDialog(BuildContext context) {
+    final controller = TextEditingController(
+      text: provider.goal?.dailyTargetMl.toString() ?? '2500',
+    );
+    
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Set Hydration Goal'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Set your daily water intake goal in milliliters (ml)'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Daily Goal (ml)',
+                border: OutlineInputBorder(),
+                suffixText: 'ml',
               ),
             ),
           ],
-          onSelected: (value) {
-            if (value == 'delete') {
-              provider.deleteHydration(entry.id);
-            }
-          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final value = int.tryParse(controller.text);
+              if (value != null && value > 0 && value <= 10000) {
+                Navigator.pop(dialogContext);
+                await provider.setGoal(value);
+              } else {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid goal (50-10000 ml)'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Save Goal'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressCard() {
+    final total = provider.todayTotalMl;
+    final target = provider.todayGoal;
+    final percentage = provider.todayPercentage;
+    final completed = provider.todayCompleted;
+    
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Today\'s Progress',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: completed ? Colors.green.withOpacity(0.1) : Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    completed ? 'Goal Achieved! 🎉' : '${percentage.toInt()}%',
+                    style: TextStyle(
+                      color: completed ? Colors.green : Colors.blue,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            Center(
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 140,
+                    height: 140,
+                    child: CircularProgressIndicator(
+                      value: target > 0 ? total / target : 0,
+                      backgroundColor: Colors.blue.withOpacity(0.1),
+                      color: completed ? Colors.green : Colors.blue,
+                      strokeWidth: 12,
+                    ),
+                  ),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '$total',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          color: completed ? Colors.green : Colors.blue,
+                        ),
+                      ),
+                      Text(
+                        'of $target ml',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            if (provider.dailyStats?.breakdown != null) ...[
+              const Divider(),
+              const SizedBox(height: 8),
+              const Text(
+                'Breakdown',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: provider.dailyStats!.breakdown.entries
+                    .where((e) => e.value > 0)
+                    .map((entry) {
+                      final drinkType = provider.drinkTypes.firstWhere(
+                        (d) => d.value == entry.key,
+                        orElse: () => DrinkType(
+                          value: entry.key, 
+                          label: entry.key, 
+                          color: '#6B7280', 
+                          icon: 'local_drink',
+                        ),
+                      );
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: drinkType.colorValue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.water_drop,
+                              size: 14,
+                              color: drinkType.colorValue,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${entry.value}ml ${drinkType.label}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: drinkType.colorValue,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    })
+                    .toList(),
+              ),
+            ],
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildWeeklyStatsTab() {
+    final weeklyData = provider.getWeeklyHydrationData();
+    final labels = provider.getWeekLabels();
+    final maxValue = weeklyData.isEmpty ? 1 : weeklyData.reduce((a, b) => a > b ? a : b);
+    
+    if (weeklyData.isEmpty || weeklyData.every((v) => v == 0)) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.water_drop, size: 48, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('No data for this week', style: TextStyle(color: Colors.grey)),
+            SizedBox(height: 8),
+            Text('Log some hydration to see your progress', style: TextStyle(color: Colors.grey, fontSize: 12)),
+          ],
+        ),
+      );
+    }
+    
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStatItem('Total', '${provider.weeklyTotalMl}ml', Icons.water_drop, Colors.blue),
+              _buildStatItem('Daily Avg', '${provider.weeklyAverageMl}ml', Icons.calendar_today, Colors.green),
+              _buildStatItem('Achievement', '${provider.weeklyAchievement}%', Icons.flag, Colors.orange),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 16),
+        
+        SizedBox(
+          height: 180,
+          child: Row(
+            children: List.generate(7, (index) {
+              final barHeight = maxValue > 0 ? ((weeklyData[index] / maxValue) * 140).toDouble() : 0.0;
+              return Expanded(
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        alignment: Alignment.bottomCenter,
+                        child: Container(
+                          width: 28,
+                          height: barHeight,
+                          decoration: BoxDecoration(
+                            color: weeklyData[index] > 0 ? Colors.blue : Colors.grey[300],
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      labels[index],
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: weeklyData[index] > 0 ? Colors.black : Colors.grey[500],
+                      ),
+                    ),
+                    Text(
+                      weeklyData[index].toInt().toString(),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.blue,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDistributionTab() {
+    final distribution = provider.drinkTypeDistribution;
+    
+    if (distribution.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.pie_chart, size: 48, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('No distribution data', style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+    
+    return ListView.builder(
+      itemCount: distribution.length,
+      itemBuilder: (BuildContext context, int index) {
+        final item = distribution[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: item.colorValue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.water_drop, color: item.colorValue),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.label,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          Text(
+                            '${item.totalMl} ml · ${item.entryCount} entries',
+                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: item.colorValue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${item.percentage}%',
+                        style: TextStyle(
+                          color: item.colorValue,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                LinearProgressIndicator(
+                  value: item.percentage / 100,
+                  backgroundColor: item.colorValue.withOpacity(0.1),
+                  color: item.colorValue,
+                  borderRadius: BorderRadius.circular(4),
+                  minHeight: 6,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTrendsTab() {
+    final trends = provider.trends;
+    
+    if (trends.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.trending_up, size: 48, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('No trend data', style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+    
+    final recentTrends = trends.length > 8 ? trends.sublist(trends.length - 8) : trends;
+    
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildStatItem(
+                  'Total', 
+                  '${recentTrends.fold<int>(0, (sum, t) => sum + t.totalMl)}ml', 
+                  Icons.water_drop, 
+                  Colors.blue,
+                ),
+                _buildStatItem(
+                  'Avg Daily', 
+                  '${(recentTrends.fold<int>(0, (sum, t) => sum + t.totalMl) / recentTrends.length).round()}ml', 
+                  Icons.calendar_today, 
+                  Colors.green,
+                ),
+                _buildStatItem(
+                  'Water %', 
+                  '${(recentTrends.fold<int>(0, (sum, t) => sum + t.waterMl) / recentTrends.fold<int>(0, (sum, t) => sum + t.totalMl) * 100).round()}%', 
+                  Icons.water, 
+                  Colors.cyan,
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          SizedBox(
+            height: 180,
+            child: Row(
+              children: List.generate(recentTrends.length, (index) {
+                final trend = recentTrends[index];
+                final maxTotal = recentTrends.map((t) => t.totalMl).reduce((a, b) => a > b ? a : b);
+                final barHeight = maxTotal > 0 ? ((trend.totalMl / maxTotal) * 140).toDouble() : 0.0;
+                
+                return Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          alignment: Alignment.bottomCenter,
+                          child: Container(
+                            width: 24,
+                            height: barHeight,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                colors: [Colors.blue, Colors.cyan],
+                              ),
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${trend.date.day}/${trend.date.month}',
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHydrationEntryCard(HydrationLog log, BuildContext context) {
+    final drinkType = provider.drinkTypes.firstWhere(
+      (d) => d.value == log.drinkType,
+      orElse: () => DrinkType(
+        value: log.drinkType, 
+        label: log.displayName, 
+        color: '#6B7280', 
+        icon: 'local_drink',
+      ),
+    );
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => _showEditHydrationDialog(context, log),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: drinkType.colorValue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.water_drop, color: drinkType.colorValue),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      log.displayName,
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    Text(
+                      '${log.amountMl}ml • ${log.formattedTime}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: drinkType.colorValue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${log.amountMl} ml',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: drinkType.colorValue,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              PopupMenuButton(
+                icon: const Icon(Icons.more_vert, size: 20),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'edit',
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit, size: 20, color: Colors.blue),
+                        SizedBox(width: 8),
+                        Text('Edit'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete, size: 20, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text('Delete', style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
+                ],
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    _showEditHydrationDialog(context, log);
+                  } else if (value == 'delete') {
+                    _showDeleteLogConfirmation(log, context);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showEditHydrationDialog(BuildContext context, HydrationLog log) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AddHydrationDialog(
+        selectedDate: log.logDate,
+        provider: provider,
+        existingLog: log,
+      ),
+    ).then((_) => onRefresh());
+  }
+
+  void _showDeleteLogConfirmation(HydrationLog log, BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Entry'),
+        content: Text('Delete ${log.displayName} (${log.amountMl}ml) from ${log.formattedTime}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await provider.deleteHydrationLog(log.id);
+              await onRefresh();
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value, IconData icon, Color color) {
+    return Column(
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: color),
+        ),
+        Text(
+          label,
+          style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+        ),
+      ],
     );
   }
 }

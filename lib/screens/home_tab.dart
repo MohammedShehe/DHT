@@ -5,6 +5,7 @@ import '../providers/dashboard_provider.dart';
 import '../providers/activity_provider.dart';
 import '../providers/gamification_provider.dart';
 import '../providers/smart_reminder_provider.dart';
+import '../providers/hydration_provider.dart'; // Add this import
 import '../services/auth_service.dart';
 import '../services/dashboard_service.dart';
 import '../models/dashboard_models.dart';
@@ -329,12 +330,17 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     );
   }
 
+  // FIXED: Pass HydrationProvider to AddHydrationDialog
   void _showAddHydrationDialog() {
+    final hydrationProvider = Provider.of<HydrationProvider>(context, listen: false);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const AddHydrationDialog(),
+      builder: (context) => AddHydrationDialog(
+        selectedDate: DateTime.now(),
+        provider: hydrationProvider,
+      ),
     );
   }
 
@@ -690,6 +696,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     );
   }
 
+  // Rest of the methods remain the same...
   Widget _buildWelcomeCard(DashboardSummary? summary) {
     final displayName = _userName.isNotEmpty ? _userName : 'User';
     
@@ -769,7 +776,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 ),
                 GestureDetector(
                   onTap: () {
-                    // Navigate to gamification tab to see streaks
                     _navigateToGamificationTab(tabIndex: 0);
                   },
                   child: Container(
@@ -841,8 +847,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 Expanded(
                   child: GestureDetector(
                     onTap: () {
-                      // Navigate to activity tab to see more stats
-                      _navigateToActivityTab(tabIndex: 1); // Workouts tab
+                      _navigateToActivityTab(tabIndex: 1);
                     },
                     child: Tooltip(
                       message: 'Total Daily Energy Expenditure\n(BMR + Daily Activity + Exercise)',
@@ -858,8 +863,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 Expanded(
                   child: GestureDetector(
                     onTap: () {
-                      // Navigate to activity tab - steps tab
-                      _navigateToActivityTab(tabIndex: 1); // Workouts tab since steps are part of activity
+                      _navigateToActivityTab(tabIndex: 1);
                     },
                     child: _buildMetricChip(
                       summary.stepsToday.toString(),
@@ -871,8 +875,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 Expanded(
                   child: GestureDetector(
                     onTap: () {
-                      // Navigate to activity tab - sleep tab
-                      _navigateToActivityTab(tabIndex: 2); // Sleep tab
+                      _navigateToActivityTab(tabIndex: 2);
                     },
                     child: _buildMetricChip(
                       summary.sleepHours.toStringAsFixed(1),
@@ -1172,7 +1175,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     
     return InkWell(
       onTap: () {
-        // Navigate to appropriate tab based on label
         if (label.contains('Steps')) {
           _navigateToActivityTab(tabIndex: 1);
         } else if (label.contains('Water')) {
@@ -1311,7 +1313,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                     return Expanded(
                       child: GestureDetector(
                         onTap: () {
-                          // Show day details
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('${labels[index]}: ${stepsData[index].toInt()} steps'),
@@ -1434,7 +1435,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               final activity = activities[index];
               return GestureDetector(
                 onTap: () {
-                  // Navigate to appropriate tab based on activity type
                   if (activity.type == 'steps' || activity.type == 'workout') {
                     _navigateToActivityTab(tabIndex: 1);
                   } else if (activity.type == 'water') {
@@ -1525,13 +1525,11 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         ),
         const SizedBox(height: 12),
         
-        // Show only top 3 unread reminders
         ...unreadReminders.take(3).map((reminder) => _buildSmartReminderCard(context, reminder, provider)),
       ],
     );
   }
 
-  // Smart Reminder Card
   Widget _buildSmartReminderCard(BuildContext context, SmartReminder reminder, SmartReminderProvider provider) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1554,7 +1552,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Icon
               Container(
                 width: 40,
                 height: 40,
@@ -1569,8 +1566,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 ),
               ),
               const SizedBox(width: 12),
-              
-              // Content
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1658,7 +1653,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 ),
               ),
               
-              // Action indicator
               if (reminder.actionType != null)
                 Icon(
                   Icons.arrow_forward_ios,
@@ -1672,7 +1666,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     );
   }
 
-  // Show all reminders dialog
   void _showRemindersDialog(BuildContext context, SmartReminderProvider provider) {
     showModalBottomSheet(
       context: context,
