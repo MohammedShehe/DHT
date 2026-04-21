@@ -74,7 +74,7 @@ class SleepLog {
       interruptions: parseInt(json['interruptions']),
       sleepQuality: json['sleep_quality']?.toString() ?? 'Good',
       sleepDate: parseDateTime(json['sleep_date']),
-      totalHours: parseDouble(json['total_hours']),
+      totalHours: parseDouble(json['total_hours']).abs(), // Use absolute value
       notes: json['notes']?.toString(),
       createdAt: parseDateTime(json['created_at']),
       updatedAt: parseDateTime(json['updated_at']),
@@ -90,7 +90,7 @@ class SleepLog {
       'interruptions': interruptions,
       'sleep_quality': sleepQuality,
       'sleep_date': sleepDate.toIso8601String().split('T')[0],
-      'total_hours': totalHours,
+      'total_hours': totalHours.abs(), // Use absolute value
       'notes': notes,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
@@ -189,7 +189,7 @@ class WeeklySleepStat {
       dayOfWeek: parseInt(json['day_of_week']),
       dayName: json['day_name']?.toString() ?? '',
       logCount: parseInt(json['log_count']),
-      avgHours: parseDouble(json['avg_hours']),
+      avgHours: parseDouble(json['avg_hours']).abs(),
       avgInterruptions: parseDouble(json['avg_interruptions']),
       excellentCount: parseInt(json['excellent_count']),
       goodCount: parseInt(json['good_count']),
@@ -233,7 +233,6 @@ class SleepQualityType {
   }
 }
 
-// Additional model classes needed for the provider
 class SleepSummary {
   final int totalLogs;
   final double averageSleepHours;
@@ -272,10 +271,10 @@ class SleepSummary {
 
     return SleepSummary(
       totalLogs: parseInt(json['total_logs']),
-      averageSleepHours: parseDouble(json['average_sleep_hours']),
+      averageSleepHours: parseDouble(json['average_sleep_hours']).abs(),
       averageInterruptions: parseDouble(json['average_interruptions']),
-      bestSleepHours: parseDouble(json['best_sleep_hours']),
-      worstSleepHours: parseDouble(json['worst_sleep_hours']),
+      bestSleepHours: parseDouble(json['best_sleep_hours']).abs(),
+      worstSleepHours: parseDouble(json['worst_sleep_hours']).abs(),
       qualityDistribution: json['quality_distribution'] as Map<String, dynamic>? ?? {},
       mostCommonQuality: json['most_common_quality']?.toString() ?? 'No data',
     );
@@ -294,9 +293,25 @@ class SleepComparison {
   });
 
   factory SleepComparison.fromJson(Map<String, dynamic> json) {
+    double parseDouble(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is double) return value;
+      if (value is int) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? 0.0;
+      return 0.0;
+    }
+
     return SleepComparison(
-      currentWeek: json['current_week'] as Map<String, dynamic>? ?? {},
-      previousWeek: json['previous_week'] as Map<String, dynamic>? ?? {},
+      currentWeek: {
+        'avg_hours': parseDouble(json['current_week']?['avg_hours']).abs(),
+        'avg_interruptions': parseDouble(json['current_week']?['avg_interruptions']),
+        'total_logs': json['current_week']?['total_logs'] ?? 0,
+      },
+      previousWeek: {
+        'avg_hours': parseDouble(json['previous_week']?['avg_hours']).abs(),
+        'avg_interruptions': parseDouble(json['previous_week']?['avg_interruptions']),
+        'total_logs': json['previous_week']?['total_logs'] ?? 0,
+      },
       changes: json['changes'] as Map<String, dynamic>? ?? {},
     );
   }
@@ -375,7 +390,7 @@ class SleepTrend {
 
     return SleepTrend(
       week: json['week']?.toString() ?? '',
-      avgHours: parseDouble(json['avg_hours']),
+      avgHours: parseDouble(json['avg_hours']).abs(),
       avgInterruptions: parseDouble(json['avg_interruptions']),
       totalLogs: parseInt(json['total_logs']),
       qualityCounts: {
