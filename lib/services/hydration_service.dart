@@ -8,7 +8,8 @@ import '../utils/api_config.dart';
 import '../models/hydration_models.dart';
 
 class HydrationService {
-  static String get baseUrl => '${ApiConfig.baseUrl}/hydration-activity';
+  static String get hydrationBaseUrl => '${ApiConfig.baseUrl}/hydration-activity';
+  static String get waterBaseUrl => '${ApiConfig.baseUrl}/water';
 
   static Future<bool> _checkNetwork() async {
     try {
@@ -24,7 +25,7 @@ class HydrationService {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  // ===== PUBLIC ENDPOINTS =====
+  // ===== DRINK TYPES & PRESET AMOUNTS (from hydration-activity) =====
 
   static Future<Map<String, dynamic>> getDrinkTypes() async {
     if (!await _checkNetwork()) {
@@ -38,7 +39,7 @@ class HydrationService {
     try {
       final headers = await AuthService.getAuthHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/drink-types'),
+        Uri.parse('$hydrationBaseUrl/drink-types'),
         headers: headers,
       );
 
@@ -91,7 +92,7 @@ class HydrationService {
     try {
       final headers = await AuthService.getAuthHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/preset-amounts'),
+        Uri.parse('$hydrationBaseUrl/preset-amounts'),
         headers: headers,
       );
 
@@ -128,9 +129,9 @@ class HydrationService {
     ];
   }
 
-  // ===== GOAL MANAGEMENT (CORRECTED: Using /goal endpoint) =====
+  // ===== WATER GOAL MANAGEMENT (USES /api/water routes) =====
 
-  static Future<Map<String, dynamic>> setGoal(int dailyTargetMl) async {
+  static Future<Map<String, dynamic>> setWaterGoal(int dailyTargetGlasses) async {
     if (!await _checkNetwork()) {
       return {
         'success': false,
@@ -140,13 +141,13 @@ class HydrationService {
 
     try {
       final headers = await AuthService.getAuthHeaders();
-      print('🔵 Setting goal: POST $baseUrl/goal');
-      print('🔵 Body: {"daily_target_ml": $dailyTargetMl}');
+      print('🔵 Setting water goal: POST $waterBaseUrl/set');
+      print('🔵 Body: {"daily_target": $dailyTargetGlasses}');
       
       final response = await http.post(
-        Uri.parse('$baseUrl/goal'),
+        Uri.parse('$waterBaseUrl/set'),
         headers: headers,
-        body: json.encode({'daily_target_ml': dailyTargetMl}),
+        body: json.encode({'daily_target': dailyTargetGlasses}),
       );
 
       final data = json.decode(response.body);
@@ -155,16 +156,16 @@ class HydrationService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {
           'success': true,
-          'message': data['message'] ?? 'Goal saved successfully',
+          'message': data['message'] ?? 'Water goal saved successfully',
         };
       } else {
         return {
           'success': false,
-          'message': data['message'] ?? 'Failed to save goal',
+          'message': data['message'] ?? 'Failed to save water goal',
         };
       }
     } catch (e) {
-      print('🔴 Set goal error: $e');
+      print('🔴 Set water goal error: $e');
       return {
         'success': false,
         'message': 'Connection error: $e',
@@ -172,7 +173,7 @@ class HydrationService {
     }
   }
 
-  static Future<Map<String, dynamic>> getGoal() async {
+  static Future<Map<String, dynamic>> getWaterGoal() async {
     if (!await _checkNetwork()) {
       return {
         'success': false,
@@ -183,10 +184,10 @@ class HydrationService {
 
     try {
       final headers = await AuthService.getAuthHeaders();
-      print('🔵 Getting goal: GET $baseUrl/goal');
+      print('🔵 Getting water goal: GET $waterBaseUrl');
       
       final response = await http.get(
-        Uri.parse('$baseUrl/goal'),
+        Uri.parse('$waterBaseUrl'),
         headers: headers,
       );
 
@@ -194,9 +195,16 @@ class HydrationService {
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        // Convert from water goal format (glasses) to ml for display
+        final dailyTargetMl = (data['daily_target'] as int?) ?? 8;
         return {
           'success': true,
-          'goal': HydrationGoal.fromJson(data),
+          'goal': HydrationGoal(
+            userId: 0,
+            dailyTargetMl: dailyTargetMl * 250, // Convert glasses to ml
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
         };
       } else if (response.statusCode == 404) {
         return {
@@ -207,12 +215,12 @@ class HydrationService {
         final data = json.decode(response.body);
         return {
           'success': false,
-          'message': data['message'] ?? 'Failed to fetch goal',
+          'message': data['message'] ?? 'Failed to fetch water goal',
           'goal': null,
         };
       }
     } catch (e) {
-      print('🔴 Get goal error: $e');
+      print('🔴 Get water goal error: $e');
       return {
         'success': false,
         'message': 'Connection error: $e',
@@ -221,7 +229,7 @@ class HydrationService {
     }
   }
 
-  static Future<Map<String, dynamic>> deleteGoal() async {
+  static Future<Map<String, dynamic>> deleteWaterGoal() async {
     if (!await _checkNetwork()) {
       return {
         'success': false,
@@ -231,10 +239,10 @@ class HydrationService {
 
     try {
       final headers = await AuthService.getAuthHeaders();
-      print('🔵 Deleting goal: DELETE $baseUrl/goal');
+      print('🔵 Deleting water goal: DELETE $waterBaseUrl');
       
       final response = await http.delete(
-        Uri.parse('$baseUrl/goal'),
+        Uri.parse('$waterBaseUrl'),
         headers: headers,
       );
 
@@ -244,16 +252,16 @@ class HydrationService {
       if (response.statusCode == 200) {
         return {
           'success': true,
-          'message': data['message'] ?? 'Goal deleted successfully',
+          'message': data['message'] ?? 'Water goal deleted successfully',
         };
       } else {
         return {
           'success': false,
-          'message': data['message'] ?? 'Failed to delete goal',
+          'message': data['message'] ?? 'Failed to delete water goal',
         };
       }
     } catch (e) {
-      print('🔴 Delete goal error: $e');
+      print('🔴 Delete water goal error: $e');
       return {
         'success': false,
         'message': 'Connection error: $e',
@@ -261,7 +269,7 @@ class HydrationService {
     }
   }
 
-  // ===== HYDRATION LOGGING =====
+  // ===== HYDRATION LOGGING (USES /api/hydration-activity/log routes) =====
 
   static Future<Map<String, dynamic>> logHydration({
     required int amountMl,
@@ -292,11 +300,11 @@ class HydrationService {
         'notes': notes,
       });
 
-      print('🔵 Logging hydration: POST $baseUrl/log');
+      print('🔵 Logging hydration: POST $hydrationBaseUrl/log');
       print('🔵 Body: $body');
 
       final response = await http.post(
-        Uri.parse('$baseUrl/log'),
+        Uri.parse('$hydrationBaseUrl/log'),
         headers: headers,
         body: body,
       );
@@ -337,10 +345,10 @@ class HydrationService {
     try {
       final headers = await AuthService.getAuthHeaders();
       final formattedDate = _formatDateForApi(date);
-      print('🔵 Getting logs: GET $baseUrl/logs/$formattedDate');
+      print('🔵 Getting hydration logs: GET $hydrationBaseUrl/logs/$formattedDate');
       
       final response = await http.get(
-        Uri.parse('$baseUrl/logs/$formattedDate'),
+        Uri.parse('$hydrationBaseUrl/logs/$formattedDate'),
         headers: headers,
       );
 
@@ -365,7 +373,7 @@ class HydrationService {
         };
       }
     } catch (e) {
-      print('🔴 Get logs error: $e');
+      print('🔴 Get hydration logs error: $e');
       return {
         'success': false,
         'message': 'Connection error: $e',
@@ -385,10 +393,10 @@ class HydrationService {
 
     try {
       final headers = await AuthService.getAuthHeaders();
-      print('🔵 Getting log by ID: GET $baseUrl/log/$id');
+      print('🔵 Getting hydration log by ID: GET $hydrationBaseUrl/log/$id');
       
       final response = await http.get(
-        Uri.parse('$baseUrl/log/$id'),
+        Uri.parse('$hydrationBaseUrl/log/$id'),
         headers: headers,
       );
 
@@ -415,7 +423,7 @@ class HydrationService {
         };
       }
     } catch (e) {
-      print('🔴 Get log by ID error: $e');
+      print('🔴 Get hydration log by ID error: $e');
       return {
         'success': false,
         'message': 'Connection error: $e',
@@ -423,8 +431,6 @@ class HydrationService {
       };
     }
   }
-
-  // ===== UPDATE/DELETE (CORRECTED) =====
 
   static Future<Map<String, dynamic>> updateHydrationLog({
     required int id,
@@ -455,11 +461,11 @@ class HydrationService {
       if (logDate != null) body['log_date'] = _formatDateForApi(logDate);
       if (notes != null) body['notes'] = notes;
 
-      print('🔵 Updating hydration log: PUT $baseUrl/log/$id');
+      print('🔵 Updating hydration log: PUT $hydrationBaseUrl/log/$id');
       print('🔵 Body: $body');
 
       final response = await http.put(
-        Uri.parse('$baseUrl/log/$id'),
+        Uri.parse('$hydrationBaseUrl/log/$id'),
         headers: headers,
         body: json.encode(body),
       );
@@ -479,7 +485,7 @@ class HydrationService {
         };
       }
     } catch (e) {
-      print('🔴 Update error: $e');
+      print('🔴 Update hydration log error: $e');
       return {
         'success': false,
         'message': 'Connection error: $e',
@@ -497,10 +503,10 @@ class HydrationService {
 
     try {
       final headers = await AuthService.getAuthHeaders();
-      print('🔵 Deleting hydration log: DELETE $baseUrl/log/$id');
+      print('🔵 Deleting hydration log: DELETE $hydrationBaseUrl/log/$id');
 
       final response = await http.delete(
-        Uri.parse('$baseUrl/log/$id'),
+        Uri.parse('$hydrationBaseUrl/log/$id'),
         headers: headers,
       );
 
@@ -519,7 +525,7 @@ class HydrationService {
         };
       }
     } catch (e) {
-      print('🔴 Delete error: $e');
+      print('🔴 Delete hydration log error: $e');
       return {
         'success': false,
         'message': 'Connection error: $e',
@@ -541,10 +547,10 @@ class HydrationService {
     try {
       final headers = await AuthService.getAuthHeaders();
       final formattedDate = _formatDateForApi(date);
-      print('🔵 Getting daily stats: GET $baseUrl/stats/daily?date=$formattedDate');
+      print('🔵 Getting daily hydration stats: GET $hydrationBaseUrl/stats/daily?date=$formattedDate');
       
       final response = await http.get(
-        Uri.parse('$baseUrl/stats/daily?date=$formattedDate'),
+        Uri.parse('$hydrationBaseUrl/stats/daily?date=$formattedDate'),
         headers: headers,
       );
 
@@ -585,10 +591,10 @@ class HydrationService {
     try {
       final headers = await AuthService.getAuthHeaders();
       final formattedDate = _formatDateForApi(startDate);
-      print('🔵 Getting weekly stats: GET $baseUrl/stats/weekly?start_date=$formattedDate');
+      print('🔵 Getting weekly hydration stats: GET $hydrationBaseUrl/stats/weekly?start_date=$formattedDate');
       
       final response = await http.get(
-        Uri.parse('$baseUrl/stats/weekly?start_date=$formattedDate'),
+        Uri.parse('$hydrationBaseUrl/stats/weekly?start_date=$formattedDate'),
         headers: headers,
       );
 
@@ -643,8 +649,8 @@ class HydrationService {
 
     try {
       final headers = await AuthService.getAuthHeaders();
-      final url = '$baseUrl/stats/distribution?start_date=${_formatDateForApi(startDate)}&end_date=${_formatDateForApi(endDate)}';
-      print('🔵 Getting distribution: GET $url');
+      final url = '$hydrationBaseUrl/stats/distribution?start_date=${_formatDateForApi(startDate)}&end_date=${_formatDateForApi(endDate)}';
+      print('🔵 Getting drink type distribution: GET $url');
       
       final response = await http.get(
         Uri.parse(url),
@@ -671,7 +677,7 @@ class HydrationService {
         };
       }
     } catch (e) {
-      print('🔴 Get distribution error: $e');
+      print('🔴 Get drink type distribution error: $e');
       return {
         'success': false,
         'message': 'Connection error: $e',
@@ -691,10 +697,10 @@ class HydrationService {
 
     try {
       final headers = await AuthService.getAuthHeaders();
-      print('🔵 Getting trends: GET $baseUrl/stats/trends?weeks=$weeks');
+      print('🔵 Getting hydration trends: GET $hydrationBaseUrl/stats/trends?weeks=$weeks');
       
       final response = await http.get(
-        Uri.parse('$baseUrl/stats/trends?weeks=$weeks'),
+        Uri.parse('$hydrationBaseUrl/stats/trends?weeks=$weeks'),
         headers: headers,
       );
 
@@ -728,5 +734,20 @@ class HydrationService {
         'trends': [],
       };
     }
+  }
+
+  // Legacy method for backward compatibility
+  static Future<Map<String, dynamic>> getGoal() async {
+    return await getWaterGoal();
+  }
+
+  static Future<Map<String, dynamic>> setGoal(int dailyTargetMl) async {
+    // Convert ml to glasses (250ml per glass)
+    final glasses = (dailyTargetMl / 250).round();
+    return await setWaterGoal(glasses);
+  }
+
+  static Future<Map<String, dynamic>> deleteGoal() async {
+    return await deleteWaterGoal();
   }
 }

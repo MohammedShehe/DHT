@@ -1,12 +1,14 @@
-// lib/widgets/add_medication_dialog.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/activity_models.dart';
 import '../providers/activity_provider.dart';
+import '../services/activity_service.dart';
 
 class AddMedicationDialog extends StatefulWidget {
-  const AddMedicationDialog({super.key});
+  final Medication? existingMedication;
+
+  const AddMedicationDialog({super.key, this.existingMedication});
 
   @override
   State<AddMedicationDialog> createState() => _AddMedicationDialogState();
@@ -24,19 +26,25 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
   List<TimeOfDay> _selectedTimes = [TimeOfDay.now()];
   DateTime _startDate = DateTime.now();
   DateTime? _endDate;
-  String _selectedColor = 'purple';
+  String _selectedColor = 'blue';
+  bool _isLoading = false;
+  int? _existingMedicationId;
   
   final List<String> _colorOptions = [
-    'purple', 'blue', 'green', 'orange', 'red', 'teal'
+    'blue', 'red', 'green', 'amber', 'purple', 'pink', 'cyan', 'orange', 'teal', 'gray'
   ];
   
   final Map<String, Color> _colorMap = {
-    'purple': Colors.purple,
     'blue': Colors.blue,
-    'green': Colors.green,
-    'orange': Colors.orange,
     'red': Colors.red,
+    'green': Colors.green,
+    'amber': Colors.amber,
+    'purple': Colors.purple,
+    'pink': Colors.pink,
+    'cyan': Colors.cyan,
+    'orange': Colors.orange,
     'teal': Colors.teal,
+    'gray': Colors.grey,
   };
 
   final List<String> _unitOptions = [
@@ -47,6 +55,30 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
   void initState() {
     super.initState();
     _unitController.text = 'mg';
+    
+    if (widget.existingMedication != null) {
+      _loadExistingMedication();
+    }
+  }
+
+  void _loadExistingMedication() {
+    final med = widget.existingMedication!;
+    _existingMedicationId = int.tryParse(med.id);
+    _nameController.text = med.name;
+    _dosageController.text = med.dosage;
+    _unitController.text = med.unit;
+    _instructionsController.text = med.instructions ?? '';
+    _prescribedByController.text = med.prescribedBy ?? '';
+    _notesController.text = med.notes ?? '';
+    _startDate = med.startDate;
+    _endDate = med.endDate;
+    _selectedColor = med.color ?? 'blue';
+    
+    if (med.scheduledTimes.isNotEmpty) {
+      _selectedTimes = med.scheduledTimes.map((dt) => 
+        TimeOfDay(hour: dt.hour, minute: dt.minute)
+      ).toList();
+    }
   }
 
   @override
@@ -84,53 +116,67 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
     }
   }
 
-  void _saveMedication() {
-    if (_formKey.currentState!.validate() && _selectedTimes.isNotEmpty) {
-      final now = DateTime.now();
-      
-      // Convert TimeOfDay to DateTime for each scheduled time
-      final scheduledTimes = _selectedTimes.map((time) {
-        return DateTime(
-          now.year, now.month, now.day,
-          time.hour, time.minute,
-        );
-      }).toList();
-      
-      // Initialize taken list with false for all times
-      final taken = List.generate(scheduledTimes.length, (index) => false);
-      
-      // Create medication JSON with correct structure
-      final medicationJson = {
-        'id': DateTime.now().millisecondsSinceEpoch.toString(),
-        'name': _nameController.text.trim(),
-        'dosage': _dosageController.text.trim(),
-        'unit': _unitController.text.isEmpty ? 'mg' : _unitController.text.trim(),
-        'scheduled_times': scheduledTimes.map((t) => t.toIso8601String()).toList(),
-        'taken': taken,
-        'start_date': _startDate.toIso8601String(),
-        'end_date': _endDate?.toIso8601String(),
-        'instructions': _instructionsController.text.isEmpty ? null : _instructionsController.text.trim(),
-        'prescribed_by': _prescribedByController.text.isEmpty ? null : _prescribedByController.text.trim(),
-        'notes': _notesController.text.isEmpty ? null : _notesController.text.trim(),
-        'color': _selectedColor,
-        'is_active': true,
-      };
-      
-      // Use provider to add medication
-      final provider = Provider.of<ActivityProvider>(context, listen: false);
-      provider.addMedication(medicationJson);
-      
-      if (mounted) {
-        Navigator.pop(context);
-      }
-    } else if (_selectedTimes.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please add at least one time for medication'),
-          backgroundColor: Colors.red,
-        ),
-      );
+  Future<void> _saveMedication() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_selectedTimes.isEmpty) {
+      _showMessage('Please add at least one time for medication', isError: true);
+      return;
     }
+
+    setState(() => _isLoading = true);
+
+    final medicationData = {
+      'name': _nameController.text.trim(),
+      'dosage': _dosageController.text.trim(),
+      'unit': _unitController.text.isEmpty ? 'mg' : _unitController.text.trim(),
+      'color': _selectedColor,
+      'start_date': _startDate.toIso8601String(),
+      'end_date': _endDate?.toIso8601String(),
+      'instructions': _instructionsController.text.isNotEmpty ? _instructionsController.text.trim() : null,
+      'prescribed_by': _prescribedByController.text.isNotEmpty ? _prescribedByController.text.trim() : null,
+      'notes': _notesController.text.isNotEmpty ? _notesController.text.trim() : null,
+      'scheduled_times': _selectedTimes.map((time) {
+        return DateTime(
+          _startDate.year,
+          _startDate.month,
+          _startDate.day,
+          time.hour,
+          time.minute,
+        );
+      }).toList(),
+    };
+
+    Map<String, dynamic> result;
+    
+    if (_existingMedicationId != null) {
+      result = await ActivityService.updateMedication(_existingMedicationId!, medicationData);
+    } else {
+      result = await ActivityService.createMedication(medicationData);
+    }
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+      
+      if (result['success']) {
+        // Refresh medications list
+        final provider = Provider.of<ActivityProvider>(context, listen: false);
+        await provider.loadActivityData();
+        _showMessage(result['message']);
+        Navigator.pop(context, true);
+      } else {
+        _showMessage(result['message'], isError: true);
+      }
+    }
+  }
+
+  void _showMessage(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -162,9 +208,9 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Add Medication',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+                Text(
+                  widget.existingMedication == null ? 'Add Medication' : 'Edit Medication',
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 20),
                 
@@ -256,13 +302,14 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
                             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                           ),
                           const SizedBox(height: 8),
-                          Row(
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
                             children: _colorOptions.map((colorName) {
                               final isSelected = _selectedColor == colorName;
                               return GestureDetector(
                                 onTap: () => setState(() => _selectedColor = colorName),
                                 child: Container(
-                                  margin: const EdgeInsets.only(right: 12),
                                   width: 36,
                                   height: 36,
                                   decoration: BoxDecoration(
@@ -477,7 +524,7 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: _isLoading ? null : () => Navigator.pop(context),
                         style: OutlinedButton.styleFrom(
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -490,7 +537,7 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: _saveMedication,
+                        onPressed: _isLoading ? null : _saveMedication,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.purple,
                           foregroundColor: Colors.white,
@@ -499,7 +546,16 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
                           ),
                           padding: const EdgeInsets.symmetric(vertical: 16),
                         ),
-                        child: const Text('Add Medication'),
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(widget.existingMedication == null ? 'Add Medication' : 'Update'),
                       ),
                     ),
                   ],

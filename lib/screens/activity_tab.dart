@@ -1,4 +1,3 @@
-// lib/screens/activity_tab.dart
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -2624,6 +2623,34 @@ class MedicationsTab extends StatelessWidget {
 
   const MedicationsTab({super.key, required this.provider, required this.onRefresh});
 
+  // Convert color name string to Color object
+  Color _getColorFromString(String? colorName) {
+    switch (colorName?.toLowerCase()) {
+      case 'blue':
+        return Colors.blue;
+      case 'red':
+        return Colors.red;
+      case 'green':
+        return Colors.green;
+      case 'amber':
+        return Colors.amber;
+      case 'purple':
+        return Colors.purple;
+      case 'pink':
+        return Colors.pink;
+      case 'cyan':
+        return Colors.cyan;
+      case 'orange':
+        return Colors.orange;
+      case 'teal':
+        return Colors.teal;
+      case 'gray':
+        return Colors.grey;
+      default:
+        return Colors.purple;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final today = provider.selectedDate;
@@ -2638,6 +2665,7 @@ class MedicationsTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Adherence Summary Card
             Card(
               elevation: 2,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -2712,7 +2740,7 @@ class MedicationsTab extends StatelessWidget {
                 ),
               )
             else
-              ...todaysMeds.map((medication) => _buildMedicationCard(context, medication, provider)).toList(),
+              ...todaysMeds.map((medication) => _buildMedicationCard(context, medication)).toList(),
           ],
         ),
       ),
@@ -2737,23 +2765,26 @@ class MedicationsTab extends StatelessWidget {
     return taken;
   }
 
-  Widget _buildMedicationCard(BuildContext context, Medication medication, ActivityProvider provider) {
-    final color = medication.color != null 
-        ? Color(int.parse(medication.color!.replaceFirst('#', '0xff')))
-        : Colors.purple;
+  Widget _buildMedicationCard(BuildContext context, Medication medication) {
+    final color = _getColorFromString(medication.color);
     
     final today = provider.selectedDate;
-    final todayTimes = <int, DateTime>{};
+    final todaySchedules = <int, Map<String, dynamic>>{};
+    
+    // Get the schedule times for today
     for (int i = 0; i < medication.scheduledTimes.length; i++) {
       final time = medication.scheduledTimes[i];
       if (time.year == today.year &&
           time.month == today.month &&
           time.day == today.day) {
-        todayTimes[i] = time;
+        todaySchedules[i] = {
+          'time': time,
+          'scheduleId': null, // Pass null to avoid "Schedule not found" error
+        };
       }
     }
     
-    if (todayTimes.isEmpty) return const SizedBox();
+    if (todaySchedules.isEmpty) return const SizedBox();
     
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -2787,30 +2818,51 @@ class MedicationsTab extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '${medication.dosage}${medication.unit}',
+                        '${medication.dosage} ${medication.unit}',
                         style: TextStyle(color: Colors.grey[600], fontSize: 14),
                       ),
                     ],
                   ),
                 ),
-                if (medication.prescribedBy != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
+                // Edit and Delete Menu
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Colors.grey),
+                  onSelected: (value) async {
+                    if (value == 'edit') {
+                      _showEditMedicationDialog(context, medication);
+                    } else if (value == 'delete') {
+                      _showDeleteConfirmation(context, medication);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, size: 20, color: Colors.blue),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
+                      ),
                     ),
-                    child: Text(
-                      medication.prescribedBy!,
-                      style: TextStyle(color: color, fontSize: 11),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete, size: 20, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Delete', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
+                ),
               ],
             ),
             
             const SizedBox(height: 16),
             
-            if (medication.instructions != null) ...[
+            if (medication.instructions != null && medication.instructions!.isNotEmpty) ...[
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -2839,18 +2891,20 @@ class MedicationsTab extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             
-            ...todayTimes.entries.map((entry) {
+            ...todaySchedules.entries.map((entry) {
               final index = entry.key;
-              final time = entry.value;
+              final scheduleData = entry.value;
+              final time = scheduleData['time'] as DateTime;
+              final scheduleId = scheduleData['scheduleId'] as int?;
               final taken = index < medication.taken.length ? medication.taken[index] : false;
+              
               return _buildDoseTile(
-                context,
-                DateFormat.jm().format(time),
-                taken,
-                color,
-                () {
-                  provider.markMedicationTaken(medication.id, index, !taken);
-                },
+                context: context,
+                medicationId: int.parse(medication.id),
+                scheduleId: scheduleId,
+                time: time,
+                taken: taken,
+                color: color,
               );
             }).toList(),
           ],
@@ -2859,9 +2913,48 @@ class MedicationsTab extends StatelessWidget {
     );
   }
 
-  Widget _buildDoseTile(BuildContext context, String time, bool taken, Color color, VoidCallback onTap) {
+  Widget _buildDoseTile({
+    required BuildContext context,
+    required int medicationId,
+    required int? scheduleId,
+    required DateTime time,
+    required bool taken,
+    required Color color,
+  }) {
+    final formattedTime = DateFormat.jm().format(time);
+    final now = DateTime.now();
+    final isPast = time.isBefore(now);
+    
     return GestureDetector(
-      onTap: onTap,
+      onTap: () async {
+        // Show loading indicator
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 12),
+                Text('Updating...'),
+              ],
+            ),
+            duration: Duration(seconds: 1),
+          ),
+        );
+        
+        await provider.markMedicationTaken(
+          medicationId: medicationId,
+          scheduleId: scheduleId,
+          logDate: DateTime.now(),
+          logTime: TimeOfDay.fromDateTime(time),
+          status: taken ? 'skipped' : 'taken',
+        );
+        
+        await onRefresh();
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -2881,13 +2974,30 @@ class MedicationsTab extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Text(
-              time,
+              formattedTime,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: taken ? FontWeight.w600 : FontWeight.normal,
                 color: taken ? color : Colors.grey[700],
               ),
             ),
+            if (isPast && !taken)
+              Container(
+                margin: const EdgeInsets.only(left: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Missed',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.red,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
             const Spacer(),
             if (taken)
               Container(
@@ -2903,6 +3013,61 @@ class MedicationsTab extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showEditMedicationDialog(BuildContext context, Medication medication) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AddMedicationDialog(
+        existingMedication: medication,
+      ),
+    ).then((_) => onRefresh());
+  }
+
+  void _showDeleteConfirmation(BuildContext context, Medication medication) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Medication'),
+        content: Text('Are you sure you want to delete "${medication.name}"? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              
+              // Show loading
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Row(
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 12),
+                      Text('Deleting...'),
+                    ],
+                  ),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+              
+              await provider.deleteMedication(int.parse(medication.id));
+              await onRefresh();
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
     );
   }

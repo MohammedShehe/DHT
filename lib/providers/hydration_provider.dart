@@ -107,7 +107,7 @@ class HydrationProvider extends ChangeNotifier {
     }
   }
 
-  // ===== GOAL MANAGEMENT =====
+  // ===== GOAL MANAGEMENT (USES WATER GOAL ROUTE) =====
 
   Future<void> loadGoal() async {
     final result = await HydrationService.getGoal();
@@ -121,7 +121,8 @@ class HydrationProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    final result = await HydrationService.setGoal(dailyTargetMl);
+    // Use the water goal route (POST /api/water/set)
+    final result = await HydrationService.setWaterGoal(dailyTargetMl);
     
     _isLoading = false;
     if (result['success']) {
@@ -140,7 +141,8 @@ class HydrationProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    final result = await HydrationService.deleteGoal();
+    // Use the water goal route (DELETE /api/water)
+    final result = await HydrationService.deleteWaterGoal();
     
     _isLoading = false;
     if (result['success']) {
@@ -155,7 +157,7 @@ class HydrationProvider extends ChangeNotifier {
     return result;
   }
 
-  // ===== HYDRATION LOGGING =====
+  // ===== HYDRATION LOGGING (USES HYDRATION ACTIVITY ROUTE) =====
 
   Future<Map<String, dynamic>> logHydration({
     required int amountMl,
@@ -224,7 +226,7 @@ class HydrationProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    print('🟡 Updating log in provider: id=$id, amount=$amountMl');
+    print('🟡 Updating hydration log: id=$id, amount=$amountMl');
 
     final result = await HydrationService.updateHydrationLog(
       id: id,
@@ -238,8 +240,10 @@ class HydrationProvider extends ChangeNotifier {
 
     _isLoading = false;
     if (result['success']) {
-      await loadLogsForDate(logDate ?? _selectedDate);
-      await loadDailyStats(logDate ?? _selectedDate);
+      // Refresh logs for the appropriate date
+      final refreshDate = logDate ?? _selectedDate;
+      await loadLogsForDate(refreshDate);
+      await loadDailyStats(refreshDate);
       await loadWeeklyStats();
       _showMessage(result['message']);
     } else {
@@ -254,7 +258,7 @@ class HydrationProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    print('🟡 Deleting log in provider: id=$id');
+    print('🟡 Deleting hydration log: id=$id');
 
     final result = await HydrationService.deleteHydrationLog(id);
     

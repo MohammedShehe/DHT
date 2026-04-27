@@ -58,18 +58,14 @@ class ActivityProvider extends ChangeNotifier {
     if (_selectedDate.year == date.year && 
         _selectedDate.month == date.month && 
         _selectedDate.day == date.day) {
-      return; // Same date, no need to reload
+      return;
     }
     
     _selectedDate = date;
-    
-    // Clear current data
     _meals = [];
     _workouts = [];
     _sleep = [];
     _hydration = [];
-    
-    // Load data for the selected date
     loadActivityData();
     notifyListeners();
   }
@@ -86,7 +82,6 @@ class ActivityProvider extends ChangeNotifier {
     try {
       final dateKey = _getDateKey(_selectedDate);
       
-      // Check cache first
       if (_mealsCache.containsKey(dateKey)) {
         _meals = _mealsCache[dateKey] ?? [];
       } else {
@@ -135,16 +130,16 @@ class ActivityProvider extends ChangeNotifier {
         }
       }
       
+      // Load medications from backend
       try {
-        _medications = await ActivityService.getMedications();
-        _medications = _medications.where((med) {
-          return med.scheduledTimes.isNotEmpty;
-        }).toList();
+        final loadedMedications = await ActivityService.getMedications();
+        debugPrint('📊 ActivityProvider: Loaded ${loadedMedications.length} medications from service');
+        _medications = loadedMedications;
       } catch (e) {
+        debugPrint('Error loading medications: $e');
         _medications = [];
       }
 
-      // Load weekly summary (this is independent of selected date)
       await _loadWeeklySummary();
       
     } catch (e) {
@@ -156,34 +151,28 @@ class ActivityProvider extends ChangeNotifier {
     }
   }
 
-  // Refresh all data for current date (clear cache and reload)
   Future<void> refreshCurrentDate() async {
     final dateKey = _getDateKey(_selectedDate);
     
-    // Clear cache for current date
     _mealsCache.remove(dateKey);
     _workoutsCache.remove(dateKey);
     _sleepCache.remove(dateKey);
     _hydrationCache.remove(dateKey);
     
-    // Reload data
     await loadActivityData();
     
     _showMessage('Data refreshed for ${_formatDate(_selectedDate)}');
   }
 
-  // Refresh all cached data (clear everything)
   Future<void> refreshAllData() async {
     _isLoading = true;
     notifyListeners();
     
-    // Clear all caches
     _mealsCache.clear();
     _workoutsCache.clear();
     _sleepCache.clear();
     _hydrationCache.clear();
     
-    // Reload current date
     await loadActivityData();
     
     _showMessage('All data refreshed');
@@ -218,7 +207,6 @@ class ActivityProvider extends ChangeNotifier {
     try {
       final result = await ActivityService.saveMeal(request);
       if (result['success']) {
-        // Clear cache for the date of the meal
         final mealDate = DateTime(
           request.mealTime.year,
           request.mealTime.month,
@@ -227,7 +215,6 @@ class ActivityProvider extends ChangeNotifier {
         final dateKey = _getDateKey(mealDate);
         _mealsCache.remove(dateKey);
         
-        // If the meal date is the selected date, reload
         if (mealDate.year == _selectedDate.year &&
             mealDate.month == _selectedDate.month &&
             mealDate.day == _selectedDate.day) {
@@ -249,7 +236,6 @@ class ActivityProvider extends ChangeNotifier {
     try {
       final result = await ActivityService.updateMeal(mealId, request);
       if (result['success']) {
-        // Clear cache for current date (assuming the meal is from current date)
         _mealsCache.remove(_getDateKey(_selectedDate));
         await loadActivityData();
         _showMessage(result['message'] ?? 'Meal updated successfully');
@@ -267,7 +253,6 @@ class ActivityProvider extends ChangeNotifier {
     try {
       final result = await ActivityService.deleteMeal(mealId);
       if (result['success']) {
-        // Clear cache for current date
         _mealsCache.remove(_getDateKey(_selectedDate));
         await loadActivityData();
         _showMessage(result['message'] ?? 'Meal deleted successfully');
@@ -285,9 +270,8 @@ class ActivityProvider extends ChangeNotifier {
     try {
       await ActivityService.saveWorkout(workout);
       
-      // Parse workout time to get date
       final workoutDate = workout.time.isNotEmpty 
-          ? DateTime.now() // In a real app, you'd parse the time
+          ? DateTime.now()
           : _selectedDate;
       
       final dateKey = _getDateKey(workoutDate);
@@ -430,76 +414,204 @@ class ActivityProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> addMedication(dynamic medicationData) async {
+  // ==================== MEDICATION METHODS ====================
+
+  Future<void> addMedication(Map<String, dynamic> medicationData) async {
+    _isLoading = true;
+    notifyListeners();
+
     try {
-      Medication medication;
+      final result = await ActivityService.createMedication(medicationData);
       
-      if (medicationData is Map<String, dynamic>) {
-        if (medicationData.containsKey('times') && !medicationData.containsKey('scheduled_times')) {
-          medicationData['scheduled_times'] = medicationData['times'];
-        }
-        
-        if (!medicationData.containsKey('scheduled_times')) {
-          medicationData['scheduled_times'] = [];
-        }
-        if (!medicationData.containsKey('taken')) {
-          final scheduledTimes = medicationData['scheduled_times'] as List;
-          medicationData['taken'] = List.generate(scheduledTimes.length, (index) => false);
-        }
-        if (!medicationData.containsKey('id')) {
-          medicationData['id'] = DateTime.now().millisecondsSinceEpoch.toString();
-        }
-        
-        medication = Medication.fromJson(medicationData);
-      } else if (medicationData is Medication) {
-        medication = medicationData;
+      if (result['success']) {
+        await loadActivityData();
+        _showMessage(result['message']);
       } else {
-        throw Exception('Invalid medication data type');
+        _showMessage(result['message'], isError: true);
       }
-      
-      await ActivityService.saveMedication(medication);
-      await loadActivityData(); // Medications aren't date-specific, so reload all
-      _showMessage('${medication.name} added successfully');
     } catch (e) {
       _error = e.toString();
-      notifyListeners();
       _showMessage('Error adding medication: $e', isError: true);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  Future<void> updateMedication(Medication medication) async {
+  Future<void> updateMedication(int medicationId, Map<String, dynamic> medicationData) async {
+    _isLoading = true;
+    notifyListeners();
+
     try {
-      await ActivityService.updateMedication(medication);
-      await loadActivityData();
-      _showMessage('${medication.name} updated successfully');
+      final result = await ActivityService.updateMedication(medicationId, medicationData);
+      
+      if (result['success']) {
+        await loadActivityData();
+        _showMessage(result['message']);
+      } else {
+        _showMessage(result['message'], isError: true);
+      }
     } catch (e) {
       _error = e.toString();
-      notifyListeners();
       _showMessage('Error updating medication: $e', isError: true);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  Future<void> deleteMedication(String medicationId) async {
+  Future<void> deleteMedication(int medicationId) async {
+    _isLoading = true;
+    notifyListeners();
+
     try {
-      await ActivityService.deleteMedication(medicationId);
-      await loadActivityData();
-      _showMessage('Medication deleted successfully');
+      final result = await ActivityService.deleteMedication(medicationId);
+      
+      if (result['success']) {
+        await loadActivityData();
+        _showMessage(result['message']);
+      } else {
+        _showMessage(result['message'], isError: true);
+      }
     } catch (e) {
       _error = e.toString();
-      notifyListeners();
       _showMessage('Error deleting medication: $e', isError: true);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  Future<void> markMedicationTaken(String medicationId, int timeIndex, bool taken) async {
+  Future<void> markMedicationTaken({
+    required int medicationId,
+    int? scheduleId,
+    required DateTime logDate,
+    required TimeOfDay logTime,
+    String status = 'taken',
+    String? actualTime,
+    String? notes,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+
     try {
-      await ActivityService.markMedicationTaken(medicationId, timeIndex, taken);
-      await loadActivityData();
-      _showMessage(taken ? 'Medication marked as taken' : 'Medication marked as not taken');
+      final logDateStr = '${logDate.year}-${logDate.month.toString().padLeft(2, '0')}-${logDate.day.toString().padLeft(2, '0')}';
+      final logTimeStr = '${logTime.hour.toString().padLeft(2, '0')}:${logTime.minute.toString().padLeft(2, '0')}:00';
+      
+      final result = await ActivityService.logMedicationIntake(
+        medicationId: medicationId,
+        scheduleId: scheduleId,
+        logDate: logDateStr,
+        logTime: logTimeStr,
+        status: status,
+        actualTime: actualTime,
+        notes: notes,
+      );
+      
+      if (result['success']) {
+        await loadActivityData();
+        _showMessage(result['message']);
+      } else {
+        _showMessage(result['message'], isError: true);
+      }
     } catch (e) {
       _error = e.toString();
+      _showMessage('Error marking medication: $e', isError: true);
+    } finally {
+      _isLoading = false;
       notifyListeners();
-      _showMessage('Error updating medication status: $e', isError: true);
+    }
+  }
+
+  Future<void> updateMedicationLogStatus(int logId, String status, {String? actualTime}) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final result = await ActivityService.updateMedicationLogStatus(logId, status, actualTime: actualTime);
+      
+      if (result['success']) {
+        await loadActivityData();
+        _showMessage(result['message']);
+      } else {
+        _showMessage(result['message'], isError: true);
+      }
+    } catch (e) {
+      _error = e.toString();
+      _showMessage('Error updating log status: $e', isError: true);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getMedicationLogsForDate(DateTime date) async {
+    try {
+      final result = await ActivityService.getMedicationLogsByDate(date);
+      if (result['success']) {
+        return result['logs'];
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error getting medication logs: $e');
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>?> getMedicationDailySummary(DateTime date) async {
+    try {
+      final result = await ActivityService.getMedicationDailySummary(date);
+      if (result['success']) {
+        return result['summary'];
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error getting daily summary: $e');
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getUpcomingMedicationDoses() async {
+    try {
+      return await ActivityService.getUpcomingMedicationDoses();
+    } catch (e) {
+      debugPrint('Error getting upcoming doses: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getMissedMedicationDoses(DateTime date) async {
+    try {
+      return await ActivityService.getMissedMedicationDoses(date);
+    } catch (e) {
+      debugPrint('Error getting missed doses: $e');
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>?> getMedicationAdherenceRate(int medicationId, DateTime startDate, DateTime endDate) async {
+    try {
+      final result = await ActivityService.getMedicationAdherenceRate(medicationId, startDate, endDate);
+      if (result['success']) {
+        return result['adherence'];
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error getting adherence rate: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getAllAdherenceRates(DateTime startDate, DateTime endDate) async {
+    try {
+      final result = await ActivityService.getAllAdherenceRates(startDate, endDate);
+      if (result['success']) {
+        return result['data'];
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error getting all adherence rates: $e');
+      return null;
     }
   }
 
@@ -511,17 +623,23 @@ class ActivityProvider extends ChangeNotifier {
 
   List<Medication> getMedicationsForDate(DateTime date) {
     try {
-      return _medications.where((med) {
-        if (med.startDate.isAfter(date)) return false;
-        if (med.endDate != null && med.endDate!.isBefore(date)) return false;
+      final dateOnly = DateTime(date.year, date.month, date.day);
+      
+      final result = _medications.where((med) {
+        if (med.startDate.isAfter(dateOnly)) return false;
+        if (med.endDate != null && med.endDate!.isBefore(dateOnly)) return false;
         
         return med.scheduledTimes.any((time) {
-          return time.year == date.year &&
-                 time.month == date.month &&
-                 time.day == date.day;
+          return time.year == dateOnly.year &&
+                 time.month == dateOnly.month &&
+                 time.day == dateOnly.day;
         });
       }).toList();
+      
+      debugPrint('📊 Medications for date $dateOnly: ${result.length} found out of ${_medications.length} total');
+      return result;
     } catch (e) {
+      debugPrint('Error getting medications for date: $e');
       return [];
     }
   }
@@ -553,6 +671,7 @@ class ActivityProvider extends ChangeNotifier {
       if (totalDoses == 0) return 100.0;
       return (takenDoses / totalDoses) * 100;
     } catch (e) {
+      debugPrint('Error calculating adherence: $e');
       return 0.0;
     }
   }

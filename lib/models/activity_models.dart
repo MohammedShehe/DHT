@@ -1,6 +1,5 @@
-// lib/models/activity_models.dart
 import 'package:flutter/material.dart';
-import 'meal_models.dart'; // Import the new Meal class
+import 'meal_models.dart';
 
 class Workout {
   final String id;
@@ -147,9 +146,9 @@ class DailyNutrition {
 
 class Hydration {
   final String id;
-  final int amount; // in ml
+  final int amount;
   final DateTime time;
-  final String? type; // water, sports drink, juice, etc.
+  final String? type;
   final String? notes;
 
   Hydration({
@@ -192,7 +191,7 @@ class Medication {
   final String? notes;
   final String? instructions;
   final String? prescribedBy;
-  final String? color; // For UI differentiation
+  final String? color;
   final bool isActive;
 
   Medication({
@@ -212,52 +211,48 @@ class Medication {
   });
 
   factory Medication.fromJson(Map<String, dynamic> json) {
-    // Handle scheduled_times - ensure it's a List
+    // Parse schedules from backend response (schedules array)
     List<DateTime> scheduledTimes = [];
-    if (json['scheduled_times'] != null && json['scheduled_times'] is List) {
-      scheduledTimes = (json['scheduled_times'] as List)
-          .where((t) => t != null)
-          .map((t) {
-            try {
-              return DateTime.parse(t.toString());
-            } catch (e) {
-              debugPrint('Error parsing scheduled time: $e');
-              return DateTime.now();
-            }
-          })
-          .toList();
-    }
-
-    // Handle taken - ensure it's a List of booleans
-    List<bool> taken = [];
-    if (json['taken'] != null && json['taken'] is List) {
-      taken = (json['taken'] as List)
-          .map((t) => t == true || t == 1 || t == '1' || t == 'true')
-          .toList();
-    }
-
-    // If taken list is empty but we have scheduled times, initialize with false
-    if (taken.isEmpty && scheduledTimes.isNotEmpty) {
-      taken = List.generate(scheduledTimes.length, (index) => false);
-    }
-
-    // If taken list length doesn't match scheduled times, adjust it
-    if (taken.isNotEmpty && scheduledTimes.isNotEmpty && taken.length != scheduledTimes.length) {
-      List<bool> adjustedTaken = [];
-      for (int i = 0; i < scheduledTimes.length; i++) {
-        if (i < taken.length) {
-          adjustedTaken.add(taken[i]);
-        } else {
-          adjustedTaken.add(false);
+    
+    if (json['schedules'] != null && json['schedules'] is List) {
+      for (var schedule in json['schedules']) {
+        if (schedule['time_of_day'] != null) {
+          final timeStr = schedule['time_of_day'].toString();
+          final parts = timeStr.split(':');
+          final now = DateTime.now();
+          scheduledTimes.add(DateTime(
+            now.year, now.month, now.day,
+            int.parse(parts[0]), 
+            int.parse(parts[1]),
+          ));
         }
       }
-      taken = adjustedTaken;
+    }
+    
+    // Initialize taken list
+    List<bool> taken = List.generate(scheduledTimes.length, (index) => false);
+    
+    // Check adherence logs to mark taken
+    if (json['adherence_logs'] != null && json['adherence_logs'] is List) {
+      for (var log in json['adherence_logs']) {
+        final logTime = log['log_time']?.toString();
+        if (logTime != null && (log['status'] == 'taken' || log['status'] == 'late')) {
+          for (int i = 0; i < scheduledTimes.length; i++) {
+            final scheduleHour = scheduledTimes[i].hour;
+            final logHour = int.parse(logTime.split(':')[0]);
+            if (scheduleHour == logHour) {
+              taken[i] = true;
+              break;
+            }
+          }
+        }
+      }
     }
 
     return Medication(
       id: json['id'].toString(),
       name: json['name'] ?? '',
-      dosage: json['dosage'] ?? '',
+      dosage: json['dosage']?.toString() ?? '',
       unit: json['unit'] ?? 'mg',
       scheduledTimes: scheduledTimes,
       taken: taken,
@@ -265,11 +260,11 @@ class Medication {
           ? DateTime.parse(json['start_date']) 
           : DateTime.now(),
       endDate: json['end_date'] != null ? DateTime.parse(json['end_date']) : null,
-      notes: json['notes'],
-      instructions: json['instructions'],
-      prescribedBy: json['prescribed_by'],
-      color: json['color'],
-      isActive: json['is_active'] == 1 || json['is_active'] == true || json['is_active'] == '1' || json['is_active'] == 'true',
+      notes: json['notes']?.toString(),
+      instructions: json['instructions']?.toString(),
+      prescribedBy: json['prescribed_by']?.toString(),
+      color: json['color']?.toString(),
+      isActive: json['is_active'] == 1 || json['is_active'] == true,
     );
   }
 

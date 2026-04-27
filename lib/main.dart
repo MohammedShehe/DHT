@@ -1,4 +1,4 @@
-// lib/main.dart - Add HydrationProvider to MultiProvider
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -15,7 +15,7 @@ import 'providers/meal_provider.dart';
 import 'providers/google_fit_provider.dart';
 import 'providers/workout_detail_provider.dart';
 import 'providers/sleep_activity_provider.dart';
-import 'providers/hydration_provider.dart';  // Add this import
+import 'providers/hydration_provider.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -58,11 +58,11 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => GoogleFitProvider()),
         ChangeNotifierProvider(create: (_) => WorkoutDetailProvider()),
         ChangeNotifierProvider(create: (_) => SleepActivityProvider()),
-        ChangeNotifierProvider(create: (_) => HydrationProvider()),  // Add this line
+        ChangeNotifierProvider(create: (_) => HydrationProvider()),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        title: 'HealthTracker',
+        title: 'Digital Health Tracker',
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
             seedColor: const Color(0xFF00C853),
