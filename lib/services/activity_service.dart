@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'auth_service.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/api_config.dart';
 import '../models/activity_models.dart';
 import '../models/meal_models.dart';
@@ -10,10 +12,66 @@ import '../models/meal_request_models.dart';
 
 class ActivityService {
   static String get baseUrl => ApiConfig.baseUrl;
+  
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  static SharedPreferences? _sharedPreferences;
+  static String? _token;
+
+  static Future<void> initializeToken() async {
+    if (kIsWeb) {
+      if (_sharedPreferences == null) {
+        _sharedPreferences = await SharedPreferences.getInstance();
+      }
+      _token = _sharedPreferences!.getString('auth_token');
+    } else {
+      _token = await _secureStorage.read(key: 'auth_token');
+    }
+  }
+
+  static Future<Map<String, String>> getAuthHeaders() async {
+    if (_token == null) {
+      await initializeToken();
+    }
+    
+    if (_token == null) {
+      throw Exception('No authentication token found');
+    }
+    
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $_token',
+    };
+  }
+
+  static Future<Map<String, String>> getMultipartHeaders() async {
+    if (_token == null) {
+      await initializeToken();
+    }
+    
+    if (_token == null) {
+      throw Exception('No authentication token found');
+    }
+    
+    return {
+      'Authorization': 'Bearer $_token',
+    };
+  }
+
+  static Future<bool> _checkNetwork() async {
+    try {
+      if (kIsWeb) return true;
+      final connectivityResult = await Connectivity().checkConnectivity();
+      return connectivityResult != ConnectivityResult.none;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ==================== MEAL ENDPOINTS ====================
 
   static Future<List<Meal>> getMeals(DateTime date) async {
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       final formattedDate = date.toIso8601String().split('T')[0];
       
       final response = await http.get(
@@ -31,13 +89,14 @@ class ActivityService {
       }
       return [];
     } catch (e) {
+      debugPrint('Get meals error: $e');
       return [];
     }
   }
 
   static Future<Map<String, dynamic>> saveMeal(CreateMealRequest request) async {
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       
       final response = await http.post(
         Uri.parse('$baseUrl/meals'),
@@ -69,7 +128,7 @@ class ActivityService {
 
   static Future<Map<String, dynamic>> updateMeal(int mealId, UpdateMealRequest request) async {
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       
       final response = await http.put(
         Uri.parse('$baseUrl/meals/$mealId'),
@@ -101,7 +160,7 @@ class ActivityService {
 
   static Future<Map<String, dynamic>> deleteMeal(int mealId) async {
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       
       final response = await http.delete(
         Uri.parse('$baseUrl/meals/$mealId'),
@@ -129,9 +188,11 @@ class ActivityService {
     }
   }
 
+  // ==================== WORKOUT ENDPOINTS ====================
+
   static Future<List<Workout>> getWorkouts(DateTime date) async {
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       final formattedDate = date.toIso8601String().split('T')[0];
       
       final response = await http.get(
@@ -152,7 +213,7 @@ class ActivityService {
   }
 
   static Future<void> saveWorkout(Workout workout) async {
-    final headers = await AuthService.getAuthHeaders();
+    final headers = await getAuthHeaders();
     final response = await http.post(
       Uri.parse('$baseUrl/workouts'),
       headers: headers,
@@ -165,7 +226,7 @@ class ActivityService {
   }
 
   static Future<void> updateWorkout(Workout workout) async {
-    final headers = await AuthService.getAuthHeaders();
+    final headers = await getAuthHeaders();
     final response = await http.put(
       Uri.parse('$baseUrl/workouts/${workout.id}'),
       headers: headers,
@@ -178,7 +239,7 @@ class ActivityService {
   }
 
   static Future<void> deleteWorkout(String workoutId) async {
-    final headers = await AuthService.getAuthHeaders();
+    final headers = await getAuthHeaders();
     final response = await http.delete(
       Uri.parse('$baseUrl/workouts/$workoutId'),
       headers: headers,
@@ -189,9 +250,11 @@ class ActivityService {
     }
   }
 
+  // ==================== SLEEP ENDPOINTS ====================
+
   static Future<List<Sleep>> getSleep(DateTime date) async {
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       final formattedDate = date.toIso8601String().split('T')[0];
       
       final response = await http.get(
@@ -212,7 +275,7 @@ class ActivityService {
   }
 
   static Future<void> saveSleep(Sleep sleep) async {
-    final headers = await AuthService.getAuthHeaders();
+    final headers = await getAuthHeaders();
     final response = await http.post(
       Uri.parse('$baseUrl/sleep'),
       headers: headers,
@@ -225,7 +288,7 @@ class ActivityService {
   }
 
   static Future<void> updateSleep(Sleep sleep) async {
-    final headers = await AuthService.getAuthHeaders();
+    final headers = await getAuthHeaders();
     final response = await http.put(
       Uri.parse('$baseUrl/sleep/${sleep.id}'),
       headers: headers,
@@ -238,7 +301,7 @@ class ActivityService {
   }
 
   static Future<void> deleteSleep(String sleepId) async {
-    final headers = await AuthService.getAuthHeaders();
+    final headers = await getAuthHeaders();
     final response = await http.delete(
       Uri.parse('$baseUrl/sleep/$sleepId'),
       headers: headers,
@@ -249,9 +312,11 @@ class ActivityService {
     }
   }
 
+  // ==================== HYDRATION ENDPOINTS ====================
+
   static Future<List<Hydration>> getHydration(DateTime date) async {
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       final formattedDate = date.toIso8601String().split('T')[0];
       
       final response = await http.get(
@@ -272,7 +337,7 @@ class ActivityService {
   }
 
   static Future<void> saveHydration(Hydration hydration) async {
-    final headers = await AuthService.getAuthHeaders();
+    final headers = await getAuthHeaders();
     final response = await http.post(
       Uri.parse('$baseUrl/water/log'),
       headers: headers,
@@ -285,7 +350,7 @@ class ActivityService {
   }
 
   static Future<void> updateHydration(Hydration hydration) async {
-    final headers = await AuthService.getAuthHeaders();
+    final headers = await getAuthHeaders();
     final response = await http.put(
       Uri.parse('$baseUrl/water/log/${hydration.id}'),
       headers: headers,
@@ -298,7 +363,7 @@ class ActivityService {
   }
 
   static Future<void> deleteHydration(String hydrationId) async {
-    final headers = await AuthService.getAuthHeaders();
+    final headers = await getAuthHeaders();
     final response = await http.delete(
       Uri.parse('$baseUrl/water/log/$hydrationId'),
       headers: headers,
@@ -313,15 +378,15 @@ class ActivityService {
 
   static Future<List<Medication>> getMedications() async {
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       
       final response = await http.get(
         Uri.parse('$baseUrl/medications'),
         headers: headers,
       );
 
-      debugPrint('📋 Medications response status: ${response.statusCode}');
-      debugPrint('📋 Medications response body: ${response.body}');
+      debugPrint('📋 Get medications response: ${response.statusCode}');
+      debugPrint('📋 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -330,6 +395,9 @@ class ActivityService {
           debugPrint('✅ Loaded ${medications.length} medications');
           return medications;
         }
+      } else if (response.statusCode == 404) {
+        debugPrint('⚠️ Medications endpoint returned 404');
+        return [];
       }
       return [];
     } catch (e) {
@@ -338,43 +406,13 @@ class ActivityService {
     }
   }
 
-  static Future<Map<String, dynamic>> getMedicationById(int medicationId) async {
-    try {
-      final headers = await AuthService.getAuthHeaders();
-      
-      final response = await http.get(
-        Uri.parse('$baseUrl/medications/$medicationId'),
-        headers: headers,
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return {
-          'success': true,
-          'medication': Medication.fromJson(data),
-        };
-      } else if (response.statusCode == 404) {
-        return {
-          'success': false,
-          'message': 'Medication not found',
-        };
-      } else {
-        return {
-          'success': false,
-          'message': 'Failed to fetch medication',
-        };
-      }
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'Connection error: $e',
-      };
-    }
-  }
-
   static Future<Map<String, dynamic>> createMedication(Map<String, dynamic> medicationData) async {
+    if (!await _checkNetwork()) {
+      return {'success': false, 'message': 'No internet connection'};
+    }
+
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       
       final requestBody = {
         'name': medicationData['name'],
@@ -396,6 +434,8 @@ class ActivityService {
         }).toList(),
       };
       
+      debugPrint('Creating medication: ${json.encode(requestBody)}');
+      
       final response = await http.post(
         Uri.parse('$baseUrl/medications'),
         headers: headers,
@@ -404,7 +444,7 @@ class ActivityService {
 
       final data = json.decode(response.body);
       
-      if (response.statusCode == 201) {
+      if (response.statusCode == 201 || response.statusCode == 200) {
         return {
           'success': true,
           'message': data['message'] ?? 'Medication created successfully',
@@ -428,8 +468,12 @@ class ActivityService {
   }
 
   static Future<Map<String, dynamic>> updateMedication(int medicationId, Map<String, dynamic> medicationData) async {
+    if (!await _checkNetwork()) {
+      return {'success': false, 'message': 'No internet connection'};
+    }
+
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       
       final requestBody = <String, dynamic>{};
       if (medicationData['name'] != null) requestBody['name'] = medicationData['name'];
@@ -478,8 +522,12 @@ class ActivityService {
   }
 
   static Future<Map<String, dynamic>> deleteMedication(int medicationId) async {
+    if (!await _checkNetwork()) {
+      return {'success': false, 'message': 'No internet connection'};
+    }
+
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       
       final response = await http.delete(
         Uri.parse('$baseUrl/medications/$medicationId'),
@@ -517,8 +565,12 @@ class ActivityService {
     String? actualTime,
     String? notes,
   }) async {
+    if (!await _checkNetwork()) {
+      return {'success': false, 'message': 'No internet connection'};
+    }
+
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       
       final requestBody = {
         'medication_id': medicationId,
@@ -530,6 +582,8 @@ class ActivityService {
       if (actualTime != null) requestBody['actual_time'] = actualTime;
       if (notes != null) requestBody['notes'] = notes;
       
+      debugPrint('Logging medication intake: ${json.encode(requestBody)}');
+      
       final response = await http.post(
         Uri.parse('$baseUrl/medications/logs'),
         headers: headers,
@@ -538,10 +592,11 @@ class ActivityService {
 
       final data = json.decode(response.body);
       
-      if (response.statusCode == 201) {
+      if (response.statusCode == 201 || response.statusCode == 200) {
         return {
           'success': true,
           'message': data['message'] ?? 'Medication intake logged successfully',
+          'logId': data['id'],
         };
       } else {
         return {
@@ -559,8 +614,12 @@ class ActivityService {
   }
 
   static Future<Map<String, dynamic>> updateMedicationLogStatus(int logId, String status, {String? actualTime}) async {
+    if (!await _checkNetwork()) {
+      return {'success': false, 'message': 'No internet connection'};
+    }
+
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       
       final requestBody = {'status': status};
       if (actualTime != null) requestBody['actual_time'] = actualTime;
@@ -594,9 +653,13 @@ class ActivityService {
   }
 
   static Future<Map<String, dynamic>> getMedicationLogsByDate(DateTime date) async {
+    if (!await _checkNetwork()) {
+      return {'success': false, 'message': 'No internet connection', 'logs': []};
+    }
+
     try {
-      final headers = await AuthService.getAuthHeaders();
-      final formattedDate = date.toIso8601String().split('T')[0];
+      final headers = await getAuthHeaders();
+      final formattedDate = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
       
       final response = await http.get(
         Uri.parse('$baseUrl/medications/logs/date/$formattedDate'),
@@ -605,35 +668,27 @@ class ActivityService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        List<Map<String, dynamic>> logs = [];
-        if (data is List) {
-          logs = data.map((l) => l as Map<String, dynamic>).toList();
-        }
         return {
           'success': true,
-          'logs': logs,
+          'logs': data is List ? data : [],
         };
       } else {
-        return {
-          'success': false,
-          'message': 'Failed to fetch logs',
-          'logs': [],
-        };
+        return {'success': false, 'message': 'Failed to fetch logs', 'logs': []};
       }
     } catch (e) {
       debugPrint('Get logs by date error: $e');
-      return {
-        'success': false,
-        'message': 'Connection error: $e',
-        'logs': [],
-      };
+      return {'success': false, 'message': 'Connection error: $e', 'logs': []};
     }
   }
 
   static Future<Map<String, dynamic>> getMedicationDailySummary(DateTime date) async {
+    if (!await _checkNetwork()) {
+      return {'success': false, 'message': 'No internet connection', 'summary': null};
+    }
+
     try {
-      final headers = await AuthService.getAuthHeaders();
-      final formattedDate = date.toIso8601String().split('T')[0];
+      final headers = await getAuthHeaders();
+      final formattedDate = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
       
       final response = await http.get(
         Uri.parse('$baseUrl/medications/summary/daily?date=$formattedDate'),
@@ -642,30 +697,23 @@ class ActivityService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {
-          'success': true,
-          'summary': data,
-        };
+        return {'success': true, 'summary': data};
       } else {
-        return {
-          'success': false,
-          'message': 'Failed to fetch daily summary',
-          'summary': null,
-        };
+        return {'success': false, 'message': 'Failed to fetch daily summary', 'summary': null};
       }
     } catch (e) {
       debugPrint('Get daily summary error: $e');
-      return {
-        'success': false,
-        'message': 'Connection error: $e',
-        'summary': null,
-      };
+      return {'success': false, 'message': 'Connection error: $e', 'summary': null};
     }
   }
 
   static Future<List<Map<String, dynamic>>> getUpcomingMedicationDoses() async {
+    if (!await _checkNetwork()) {
+      return [];
+    }
+
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       
       final response = await http.get(
         Uri.parse('$baseUrl/medications/upcoming'),
@@ -686,9 +734,13 @@ class ActivityService {
   }
 
   static Future<List<Map<String, dynamic>>> getMissedMedicationDoses(DateTime date) async {
+    if (!await _checkNetwork()) {
+      return [];
+    }
+
     try {
-      final headers = await AuthService.getAuthHeaders();
-      final formattedDate = date.toIso8601String().split('T')[0];
+      final headers = await getAuthHeaders();
+      final formattedDate = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
       
       final response = await http.get(
         Uri.parse('$baseUrl/medications/missed?date=$formattedDate'),
@@ -709,8 +761,12 @@ class ActivityService {
   }
 
   static Future<Map<String, dynamic>> getMedicationAdherenceRate(int medicationId, DateTime startDate, DateTime endDate) async {
+    if (!await _checkNetwork()) {
+      return {'success': false, 'message': 'No internet connection', 'adherence': null};
+    }
+
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       final startStr = startDate.toIso8601String().split('T')[0];
       final endStr = endDate.toIso8601String().split('T')[0];
       
@@ -721,60 +777,20 @@ class ActivityService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {
-          'success': true,
-          'adherence': data,
-        };
+        return {'success': true, 'adherence': data};
       } else {
-        return {
-          'success': false,
-          'message': 'Failed to fetch adherence rate',
-        };
+        return {'success': false, 'message': 'Failed to fetch adherence rate', 'adherence': null};
       }
     } catch (e) {
       debugPrint('Get adherence rate error: $e');
-      return {
-        'success': false,
-        'message': 'Connection error: $e',
-      };
+      return {'success': false, 'message': 'Connection error: $e', 'adherence': null};
     }
   }
 
-  static Future<Map<String, dynamic>> getAllAdherenceRates(DateTime startDate, DateTime endDate) async {
-    try {
-      final headers = await AuthService.getAuthHeaders();
-      final startStr = startDate.toIso8601String().split('T')[0];
-      final endStr = endDate.toIso8601String().split('T')[0];
-      
-      final response = await http.get(
-        Uri.parse('$baseUrl/medications/adherence/all?start_date=$startStr&end_date=$endStr'),
-        headers: headers,
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return {
-          'success': true,
-          'data': data,
-        };
-      } else {
-        return {
-          'success': false,
-          'message': 'Failed to fetch adherence rates',
-        };
-      }
-    } catch (e) {
-      debugPrint('Get all adherence rates error: $e');
-      return {
-        'success': false,
-        'message': 'Connection error: $e',
-      };
-    }
-  }
 
   static Future<Map<String, dynamic>> getWeeklySummary(DateTime startDate) async {
     try {
-      final headers = await AuthService.getAuthHeaders();
+      final headers = await getAuthHeaders();
       final formattedDate = startDate.toIso8601String().split('T')[0];
       
       final response = await http.get(
@@ -783,10 +799,22 @@ class ActivityService {
       );
 
       if (response.statusCode == 200) {
-        return json.decode(response.body);
+        final data = json.decode(response.body);
+        // Handle both List and Map responses
+        if (data is List) {
+          // Return default empty map for list responses
+          return {
+            'calories': List.filled(7, 0.0),
+            'workout_minutes': List.filled(7, 0.0),
+            'sleep_hours': List.filled(7, 0.0),
+            'hydration': List.filled(7, 0.0),
+          };
+        }
+        return data as Map<String, dynamic>;
       }
       return {};
     } catch (e) {
+      debugPrint('Get weekly summary error: $e');
       return {};
     }
   }

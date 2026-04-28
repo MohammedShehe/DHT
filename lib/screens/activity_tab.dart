@@ -403,6 +403,8 @@ class _ActivityTabState extends State<ActivityTab> with SingleTickerProviderStat
   }
 }
 
+// ==================== MEALS TAB ====================
+
 class MealsTab extends StatelessWidget {
   final ActivityProvider activityProvider;
   final MealProvider mealProvider;
@@ -767,6 +769,8 @@ class MealsTab extends StatelessWidget {
   }
 }
 
+// ==================== WORKOUTS TAB ====================
+
 class WorkoutsTab extends StatelessWidget {
   final ActivityProvider activityProvider;
   final WorkoutDetailProvider workoutProvider;
@@ -801,7 +805,6 @@ class WorkoutsTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Stats Cards
             Row(
               children: [
                 Expanded(
@@ -847,7 +850,6 @@ class WorkoutsTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // Weekly Chart
             if (workoutProvider.weeklyStats.isNotEmpty)
               Card(
                 elevation: 2,
@@ -938,7 +940,6 @@ class WorkoutsTab extends StatelessWidget {
 
             const SizedBox(height: 16),
 
-            // Workout List Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -954,7 +955,6 @@ class WorkoutsTab extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Workout List
             if (workoutProvider.isLoadingWorkouts && workouts.isEmpty)
               const Center(
                 child: Padding(
@@ -984,7 +984,7 @@ class WorkoutsTab extends StatelessWidget {
                 ),
               )
             else
-              ...workouts.map((workout) => _buildWorkoutCard(context, workout)),
+              ...workouts.map((workout) => _buildWorkoutCard(context, workout)).toList(),
           ],
         ),
       ),
@@ -1205,6 +1205,8 @@ class WorkoutsTab extends StatelessWidget {
   }
 }
 
+// ==================== WORKOUT DETAILS SHEET ====================
+
 class _WorkoutDetailsSheet extends StatelessWidget {
   final WorkoutDetail workout;
 
@@ -1272,7 +1274,6 @@ class _WorkoutDetailsSheet extends StatelessWidget {
           const Divider(),
           const SizedBox(height: 16),
 
-          // Details Grid
           GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -1407,6 +1408,8 @@ class _WorkoutDetailsSheet extends StatelessWidget {
   }
 }
 
+// ==================== SLEEP TAB ====================
+
 class SleepTab extends StatelessWidget {
   final Future<void> Function() onRefresh;
 
@@ -1431,7 +1434,6 @@ class SleepTab extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Sleep Duration Card
                 Card(
                   elevation: 2,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1460,7 +1462,6 @@ class SleepTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // Sleep Log for selected date
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1645,7 +1646,6 @@ class SleepTab extends StatelessWidget {
             const Divider(),
             const SizedBox(height: 12),
             
-            // Bedtime and Wake time
             Row(
               children: [
                 Expanded(
@@ -1669,7 +1669,6 @@ class SleepTab extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             
-            // Interruptions
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -1787,6 +1786,8 @@ class SleepTab extends StatelessWidget {
   }
 }
 
+// ==================== HYDRATION TAB ====================
+
 class HydrationTab extends StatelessWidget {
   final HydrationProvider provider;
   final Future<void> Function() onRefresh;
@@ -1808,13 +1809,10 @@ class HydrationTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Goal Card
             _buildGoalCard(context),
             const SizedBox(height: 16),
-            // Today's Progress Card
             _buildProgressCard(),
             const SizedBox(height: 16),
-            // Stats Tabs
             DefaultTabController(
               length: 3,
               child: Column(
@@ -1853,7 +1851,6 @@ class HydrationTab extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            // Logs List Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1868,7 +1865,6 @@ class HydrationTab extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            // Logs List
             if (provider.isLoadingLogs && provider.logs.isEmpty)
               const Center(
                 child: Padding(
@@ -2617,47 +2613,34 @@ class HydrationTab extends StatelessWidget {
   }
 }
 
-class MedicationsTab extends StatelessWidget {
+// ==================== MEDICATIONS TAB ====================
+
+class MedicationsTab extends StatefulWidget {
   final ActivityProvider provider;
   final Future<void> Function() onRefresh;
+  final DateTime? selectedDate;
 
-  const MedicationsTab({super.key, required this.provider, required this.onRefresh});
+  const MedicationsTab({
+    super.key,
+    required this.provider,
+    required this.onRefresh,
+    this.selectedDate,
+  });
 
-  // Convert color name string to Color object
-  Color _getColorFromString(String? colorName) {
-    switch (colorName?.toLowerCase()) {
-      case 'blue':
-        return Colors.blue;
-      case 'red':
-        return Colors.red;
-      case 'green':
-        return Colors.green;
-      case 'amber':
-        return Colors.amber;
-      case 'purple':
-        return Colors.purple;
-      case 'pink':
-        return Colors.pink;
-      case 'cyan':
-        return Colors.cyan;
-      case 'orange':
-        return Colors.orange;
-      case 'teal':
-        return Colors.teal;
-      case 'gray':
-        return Colors.grey;
-      default:
-        return Colors.purple;
-    }
-  }
+  @override
+  State<MedicationsTab> createState() => _MedicationsTabState();
+}
+
+class _MedicationsTabState extends State<MedicationsTab> {
+  Map<int, bool> _expandedMedications = {};
 
   @override
   Widget build(BuildContext context) {
-    final today = provider.selectedDate;
-    final todaysMeds = provider.getMedicationsForDate(today);
+    final targetDate = widget.selectedDate ?? DateTime.now();
+    final medicationsWithDoses = widget.provider.getMedicationsForDateWithDoses(targetDate);
     
     return RefreshIndicator(
-      onRefresh: onRefresh,
+      onRefresh: widget.onRefresh,
       color: Colors.purple,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -2665,359 +2648,432 @@ class MedicationsTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Adherence Summary Card
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: Colors.purple.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.medication, color: Colors.purple, size: 30),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Medication Adherence',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${_getTakenCount(todaysMeds)}/${_getTotalDoses(todaysMeds)} doses taken today',
-                            style: TextStyle(color: Colors.grey[600]),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.purple.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '${provider.getTodaysAdherence().round()}%',
-                        style: const TextStyle(color: Colors.purple, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            
+            _buildAdherenceSummaryCard(),
             const SizedBox(height: 16),
-            
             Text(
-              "Medications for ${DateFormat('MMM d, yyyy').format(today)}",
+              "Medications for ${DateFormat('MMM d, yyyy').format(targetDate)}",
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
-            
-            if (todaysMeds.isEmpty)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    children: [
-                      Icon(Icons.medication, size: 64, color: Colors.grey[300]),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No medications scheduled for this day',
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                ),
-              )
+            if (medicationsWithDoses.isEmpty)
+              _buildEmptyState()
             else
-              ...todaysMeds.map((medication) => _buildMedicationCard(context, medication)).toList(),
+              ...medicationsWithDoses.map((item) => 
+                _buildMedicationCard(
+                  item['medication'] as Medication,
+                  item['doses'] as List<MedicationDose>,
+                  targetDate,
+                )
+              ),
           ],
         ),
       ),
     );
   }
 
-  int _getTotalDoses(List<Medication> medications) {
-    int total = 0;
-    for (var med in medications) {
-      total += med.scheduledTimes.length;
-    }
-    return total;
-  }
-
-  int _getTakenCount(List<Medication> medications) {
-    int taken = 0;
-    for (var med in medications) {
-      for (var t in med.taken) {
-        if (t) taken++;
-      }
-    }
-    return taken;
-  }
-
-  Widget _buildMedicationCard(BuildContext context, Medication medication) {
-    final color = _getColorFromString(medication.color);
+  Widget _buildAdherenceSummaryCard() {
+    final targetDate = widget.selectedDate ?? DateTime.now();
+    final medicationsWithDoses = widget.provider.getMedicationsForDateWithDoses(targetDate);
     
-    final today = provider.selectedDate;
-    final todaySchedules = <int, Map<String, dynamic>>{};
+    int totalDoses = 0;
+    int takenDoses = 0;
     
-    // Get the schedule times for today
-    for (int i = 0; i < medication.scheduledTimes.length; i++) {
-      final time = medication.scheduledTimes[i];
-      if (time.year == today.year &&
-          time.month == today.month &&
-          time.day == today.day) {
-        todaySchedules[i] = {
-          'time': time,
-          'scheduleId': null, // Pass null to avoid "Schedule not found" error
-        };
+    for (var item in medicationsWithDoses) {
+      final doses = item['doses'] as List<MedicationDose>;
+      for (var dose in doses) {
+        totalDoses++;
+        if (dose.isTaken) {
+          takenDoses++;
+        }
       }
     }
     
-    if (todaySchedules.isEmpty) return const SizedBox();
+    final adherence = totalDoses > 0 ? (takenDoses / totalDoses * 100) : 100.0;
+    final color = adherence >= 80 ? Colors.green : (adherence >= 50 ? Colors.orange : Colors.red);
+    
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.medication, color: Colors.purple, size: 30),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Medication Adherence',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$takenDoses/$totalDoses doses taken today',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${adherence.round()}%',
+                style: TextStyle(color: color, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          children: [
+            Icon(Icons.medication, size: 64, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(
+              'No medications scheduled for this day',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Tap + to add a new medication',
+              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMedicationCard(Medication medication, List<MedicationDose> doses, DateTime targetDate) {
+    final isExpanded = _expandedMedications[medication.id] ?? false;
     
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
               children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(Icons.medication, color: color),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        medication.name,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: medication.colorValue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      Text(
-                        '${medication.dosage} ${medication.unit}',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ),
-                // Edit and Delete Menu
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Colors.grey),
-                  onSelected: (value) async {
-                    if (value == 'edit') {
-                      _showEditMedicationDialog(context, medication);
-                    } else if (value == 'delete') {
-                      _showDeleteConfirmation(context, medication);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: Row(
+                      child: Icon(Icons.medication, color: medication.colorValue),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.edit, size: 20, color: Colors.blue),
-                          SizedBox(width: 8),
-                          Text('Edit'),
+                          Text(
+                            medication.name,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            '${medication.dosage.toStringAsFixed(medication.dosage.truncate() == medication.dosage ? 0 : 1)} ${medication.unit}',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                          ),
                         ],
                       ),
                     ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete, size: 20, color: Colors.red),
-                          SizedBox(width: 8),
-                          Text('Delete', style: TextStyle(color: Colors.red)),
-                        ],
-                      ),
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, color: Colors.grey),
+                      onSelected: (value) async {
+                        if (value == 'edit') {
+                          _showEditMedicationDialog(medication);
+                        } else if (value == 'delete') {
+                          _showDeleteConfirmation(medication);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit, size: 20, color: Colors.blue),
+                              SizedBox(width: 8),
+                              Text('Edit'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete, size: 20, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text('Delete', style: TextStyle(color: Colors.red)),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                if (medication.instructions != null && medication.instructions!.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, size: 16, color: Colors.grey[600]),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            medication.instructions!,
+                            style: TextStyle(color: Colors.grey[700], fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
-            
-            const SizedBox(height: 16),
-            
-            if (medication.instructions != null && medication.instructions!.isNotEmpty) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, size: 16, color: Colors.grey[600]),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        medication.instructions!,
-                        style: TextStyle(color: Colors.grey[700], fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
+          ),
+          const Divider(height: 1),
+          ...doses.map((dose) => _buildDoseTile(medication, dose, targetDate)),
+          InkWell(
+            onTap: () {
+              setState(() {
+                _expandedMedications[medication.id] = !isExpanded;
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    isExpanded ? 'Show less' : 'Show schedule',
+                    style: TextStyle(color: Colors.purple, fontSize: 12),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    isExpanded ? Icons.expand_less : Icons.expand_more,
+                    size: 16,
+                    color: Colors.purple,
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-            ],
-            
-            const Text(
-              "Today's Doses",
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 8),
-            
-            ...todaySchedules.entries.map((entry) {
-              final index = entry.key;
-              final scheduleData = entry.value;
-              final time = scheduleData['time'] as DateTime;
-              final scheduleId = scheduleData['scheduleId'] as int?;
-              final taken = index < medication.taken.length ? medication.taken[index] : false;
-              
-              return _buildDoseTile(
-                context: context,
-                medicationId: int.parse(medication.id),
-                scheduleId: scheduleId,
-                time: time,
-                taken: taken,
-                color: color,
-              );
-            }).toList(),
-          ],
-        ),
+          ),
+          if (isExpanded)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Schedule',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  ...medication.schedules.map((schedule) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.access_time, size: 14, color: Colors.grey),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${schedule.formattedTime} · ${schedule.formattedDays}',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                        ),
+                        if (schedule.dosageOverride != null)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${schedule.dosageOverride?.toStringAsFixed(schedule.dosageOverride!.truncate() == schedule.dosageOverride ? 0 : 1)} ${schedule.unitOverride ?? medication.unit}',
+                                style: const TextStyle(fontSize: 10, color: Colors.blue),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  )),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  Widget _buildDoseTile({
-    required BuildContext context,
-    required int medicationId,
-    required int? scheduleId,
-    required DateTime time,
-    required bool taken,
-    required Color color,
-  }) {
-    final formattedTime = DateFormat.jm().format(time);
-    final now = DateTime.now();
-    final isPast = time.isBefore(now);
+  Widget _buildDoseTile(Medication medication, MedicationDose dose, DateTime targetDate) {
+    final isPastDue = dose.isPastDue && dose.isPending;
+    final isTaken = dose.isTaken;
     
-    return GestureDetector(
+    return InkWell(
       onTap: () async {
-        // Show loading indicator
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(width: 12),
-                Text('Updating...'),
-              ],
+        if (!mounted) return;
+        
+        if (isTaken) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Already marked as taken'),
+              duration: Duration(seconds: 1),
             ),
-            duration: Duration(seconds: 1),
-          ),
+          );
+          return;
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  SizedBox(width: 12),
+                  Text('Logging medication...'),
+                ],
+              ),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+        
+        final result = await widget.provider.logMedicationIntake(
+          medicationId: medication.id,
+          scheduleId: dose.scheduleId,
+          logDate: targetDate,
+          logTime: TimeOfDay.fromDateTime(dose.scheduledTime),
+          status: isPastDue ? 'late' : 'taken',
+          actualTime: isPastDue ? TimeOfDay.now() : null,
         );
         
-        await provider.markMedicationTaken(
-          medicationId: medicationId,
-          scheduleId: scheduleId,
-          logDate: DateTime.now(),
-          logTime: TimeOfDay.fromDateTime(time),
-          status: taken ? 'skipped' : 'taken',
-        );
+        if (!mounted) return;
         
-        await onRefresh();
+        if (result['success']) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message']),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+          await widget.onRefresh();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'Failed to log medication'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
       },
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: taken ? color.withOpacity(0.1) : Colors.grey[50],
+          color: isTaken 
+              ? medication.colorValue.withOpacity(0.1) 
+              : (isPastDue ? Colors.red.withOpacity(0.05) : Colors.grey[50]),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: taken ? color.withOpacity(0.3) : Colors.grey[200]!,
+            color: isTaken 
+                ? medication.colorValue.withOpacity(0.3) 
+                : (isPastDue ? Colors.red.withOpacity(0.3) : Colors.grey[200]!),
           ),
         ),
         child: Row(
           children: [
             Icon(
-              taken ? Icons.check_circle : Icons.radio_button_unchecked,
-              color: taken ? color : Colors.grey[400],
+              isTaken ? Icons.check_circle : 
+              (isPastDue ? Icons.warning_amber : Icons.radio_button_unchecked),
+              color: isTaken ? medication.colorValue : 
+                     (isPastDue ? Colors.red : Colors.grey[400]),
               size: 20,
             ),
             const SizedBox(width: 12),
-            Text(
-              formattedTime,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: taken ? FontWeight.w600 : FontWeight.normal,
-                color: taken ? color : Colors.grey[700],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    dose.formattedTime,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: isTaken ? FontWeight.w600 : FontWeight.normal,
+                      color: isTaken ? medication.colorValue : 
+                             (isPastDue ? Colors.red : Colors.grey[700]),
+                    ),
+                  ),
+                  Text(
+                    '${dose.actualDosage.toStringAsFixed(dose.actualDosage.truncate() == dose.actualDosage ? 0 : 1)} ${dose.unit}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[500],
+                    ),
+                  ),
+                ],
               ),
             ),
-            if (isPast && !taken)
-              Container(
-                margin: const EdgeInsets.only(left: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'Missed',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.red,
-                    fontWeight: FontWeight.w500,
-                  ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: dose.statusColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                isTaken ? 'Taken' : (isPastDue ? 'Late' : 'Pending'),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: dose.statusColor,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-            const Spacer(),
-            if (taken)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  'Taken',
-                  style: TextStyle(fontSize: 11),
-                ),
-              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  void _showEditMedicationDialog(BuildContext context, Medication medication) {
+  void _showEditMedicationDialog(Medication medication) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -3025,10 +3081,10 @@ class MedicationsTab extends StatelessWidget {
       builder: (context) => AddMedicationDialog(
         existingMedication: medication,
       ),
-    ).then((_) => onRefresh());
+    ).then((_) => widget.onRefresh());
   }
 
-  void _showDeleteConfirmation(BuildContext context, Medication medication) {
+  void _showDeleteConfirmation(Medication medication) {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -3042,27 +3098,28 @@ class MedicationsTab extends StatelessWidget {
           TextButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
-              
-              // Show loading
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Row(
-                    children: [
-                      SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      SizedBox(width: 12),
-                      Text('Deleting...'),
-                    ],
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Row(
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 12),
+                        Text('Deleting...'),
+                      ],
+                    ),
+                    duration: Duration(seconds: 2),
                   ),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-              
-              await provider.deleteMedication(int.parse(medication.id));
-              await onRefresh();
+                );
+              }
+              await widget.provider.deleteMedication(medication.id);
+              if (mounted) {
+                await widget.onRefresh();
+              }
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Delete'),
@@ -3072,6 +3129,8 @@ class MedicationsTab extends StatelessWidget {
     );
   }
 }
+
+// ==================== WEEKLY SUMMARY SHEET ====================
 
 class WeeklySummarySheet extends StatelessWidget {
   final ActivityProvider provider;
@@ -3229,9 +3288,23 @@ class WeeklySummarySheet extends StatelessWidget {
   }
 
   Widget _buildMedicationWeeklyCard(BuildContext context, ActivityProvider provider) {
-    final todayMeds = provider.getMedicationsForDate(DateTime.now());
-    final totalDoses = todayMeds.fold(0, (sum, med) => sum + med.scheduledTimes.length);
-    final takenDoses = todayMeds.fold(0, (sum, med) => sum + med.taken.where((t) => t).length);
+    final targetDate = DateTime.now();
+    final medicationsWithDoses = provider.getMedicationsForDateWithDoses(targetDate);
+    
+    int totalDoses = 0;
+    int takenDoses = 0;
+    
+    for (var item in medicationsWithDoses) {
+      final doses = item['doses'] as List<MedicationDose>;
+      for (var dose in doses) {
+        totalDoses++;
+        if (dose.isTaken) {
+          takenDoses++;
+        }
+      }
+    }
+    
+    final adherence = totalDoses > 0 ? (takenDoses / totalDoses * 100) : 100.0;
     
     return Card(
       elevation: 2,
@@ -3255,7 +3328,7 @@ class WeeklySummarySheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    'Today: ${provider.getTodaysAdherence().round()}%',
+                    'Today: ${adherence.round()}%',
                     style: const TextStyle(color: Colors.purple, fontSize: 12),
                   ),
                 ),
@@ -3280,7 +3353,7 @@ class WeeklySummarySheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    '${provider.getTodaysAdherence().round()}%',
+                    '${adherence.round()}%',
                     style: const TextStyle(color: Colors.purple, fontSize: 10, fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -3292,6 +3365,8 @@ class WeeklySummarySheet extends StatelessWidget {
     );
   }
 }
+
+// ==================== MEAL DETAILS SHEET ====================
 
 class _MealDetailsSheet extends StatelessWidget {
   final Meal meal;

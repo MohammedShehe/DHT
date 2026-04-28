@@ -3,7 +3,6 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/activity_models.dart';
 import '../providers/activity_provider.dart';
-import '../services/activity_service.dart';
 
 class AddMedicationDialog extends StatefulWidget {
   final Medication? existingMedication;
@@ -23,29 +22,25 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
   final _prescribedByController = TextEditingController();
   final _notesController = TextEditingController();
   
-  List<TimeOfDay> _selectedTimes = [TimeOfDay.now()];
+  List<TimeOfDay> _selectedTimes = [];
   DateTime _startDate = DateTime.now();
   DateTime? _endDate;
-  String _selectedColor = 'blue';
+  String _selectedColor = '#9C27B0';
   bool _isLoading = false;
+  bool _isEditMode = false;
   int? _existingMedicationId;
+  List<int> _existingScheduleIds = [];
   
-  final List<String> _colorOptions = [
-    'blue', 'red', 'green', 'amber', 'purple', 'pink', 'cyan', 'orange', 'teal', 'gray'
+  final List<Map<String, dynamic>> _colorOptions = [
+    {'name': 'purple', 'value': '#9C27B0', 'color': Colors.purple},
+    {'name': 'blue', 'value': '#2196F3', 'color': Colors.blue},
+    {'name': 'green', 'value': '#4CAF50', 'color': Colors.green},
+    {'name': 'orange', 'value': '#FF9800', 'color': Colors.orange},
+    {'name': 'red', 'value': '#F44336', 'color': Colors.red},
+    {'name': 'teal', 'value': '#009688', 'color': Colors.teal},
+    {'name': 'cyan', 'value': '#00BCD4', 'color': Colors.cyan},
+    {'name': 'pink', 'value': '#E91E63', 'color': Colors.pink},
   ];
-  
-  final Map<String, Color> _colorMap = {
-    'blue': Colors.blue,
-    'red': Colors.red,
-    'green': Colors.green,
-    'amber': Colors.amber,
-    'purple': Colors.purple,
-    'pink': Colors.pink,
-    'cyan': Colors.cyan,
-    'orange': Colors.orange,
-    'teal': Colors.teal,
-    'gray': Colors.grey,
-  };
 
   final List<String> _unitOptions = [
     'mg', 'g', 'mcg', 'ml', 'IU', 'tablet', 'capsule', 'drop', 'puff'
@@ -57,28 +52,43 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
     _unitController.text = 'mg';
     
     if (widget.existingMedication != null) {
+      _isEditMode = true;
       _loadExistingMedication();
+    } else {
+      _selectedTimes = [TimeOfDay.now()];
     }
   }
 
   void _loadExistingMedication() {
     final med = widget.existingMedication!;
-    _existingMedicationId = int.tryParse(med.id);
+    _existingMedicationId = med.id;
     _nameController.text = med.name;
-    _dosageController.text = med.dosage;
+    _dosageController.text = med.dosage.toString();
     _unitController.text = med.unit;
     _instructionsController.text = med.instructions ?? '';
     _prescribedByController.text = med.prescribedBy ?? '';
     _notesController.text = med.notes ?? '';
     _startDate = med.startDate;
     _endDate = med.endDate;
-    _selectedColor = med.color ?? 'blue';
+    _selectedColor = med.color;
     
-    if (med.scheduledTimes.isNotEmpty) {
-      _selectedTimes = med.scheduledTimes.map((dt) => 
-        TimeOfDay(hour: dt.hour, minute: dt.minute)
-      ).toList();
+    // Store existing schedule IDs for deletion
+    _existingScheduleIds = med.schedules.map((s) => s.id!).toList();
+    
+    debugPrint('Medication schedules count: ${med.schedules.length}');
+    debugPrint('Existing schedule IDs: $_existingScheduleIds');
+    
+    // Load the scheduled times from the existing medication
+    if (med.schedules.isNotEmpty) {
+      _selectedTimes = med.schedules.map((schedule) => schedule.timeOfDay).toList();
+      for (int i = 0; i < _selectedTimes.length; i++) {
+        debugPrint('  Schedule $i: ${_selectedTimes[i].hour}:${_selectedTimes[i].minute}');
+      }
+    } else {
+      _selectedTimes = [TimeOfDay.now()];
+      debugPrint('No schedules found, using default time');
     }
+    setState(() {});
   }
 
   @override
@@ -96,12 +106,14 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
     setState(() {
       _selectedTimes.add(TimeOfDay.now());
     });
+    debugPrint('Added new time slot, total: ${_selectedTimes.length}');
   }
 
   void _removeTimeSlot(int index) {
     setState(() {
       _selectedTimes.removeAt(index);
     });
+    debugPrint('Removed time slot at index $index, remaining: ${_selectedTimes.length}');
   }
 
   Future<void> _selectTime(int index) async {
@@ -113,70 +125,150 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
       setState(() {
         _selectedTimes[index] = time;
       });
+      debugPrint('Updated schedule $index to: ${time.hour}:${time.minute}');
     }
   }
 
   Future<void> _saveMedication() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    
     if (_selectedTimes.isEmpty) {
-      _showMessage('Please add at least one time for medication', isError: true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please add at least one time for medication'),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
 
     setState(() => _isLoading = true);
 
-    final medicationData = {
-      'name': _nameController.text.trim(),
-      'dosage': _dosageController.text.trim(),
-      'unit': _unitController.text.isEmpty ? 'mg' : _unitController.text.trim(),
-      'color': _selectedColor,
-      'start_date': _startDate.toIso8601String(),
-      'end_date': _endDate?.toIso8601String(),
-      'instructions': _instructionsController.text.isNotEmpty ? _instructionsController.text.trim() : null,
-      'prescribed_by': _prescribedByController.text.isNotEmpty ? _prescribedByController.text.trim() : null,
-      'notes': _notesController.text.isNotEmpty ? _notesController.text.trim() : null,
-      'scheduled_times': _selectedTimes.map((time) {
-        return DateTime(
-          _startDate.year,
-          _startDate.month,
-          _startDate.day,
-          time.hour,
-          time.minute,
-        );
-      }).toList(),
-    };
-
-    Map<String, dynamic> result;
+    // Convert TimeOfDay to schedule data
+    final schedulesData = _selectedTimes.map((time) {
+      return {
+        'time_of_day': '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:00',
+        'days_of_week': 'all',
+      };
+    }).toList();
+    
+    debugPrint('Saving medication with ${schedulesData.length} schedules:');
+    for (int i = 0; i < schedulesData.length; i++) {
+      debugPrint('  Schedule $i: ${schedulesData[i]['time_of_day']}');
+    }
+    
+    final provider = Provider.of<ActivityProvider>(context, listen: false);
     
     if (_existingMedicationId != null) {
-      result = await ActivityService.updateMedication(_existingMedicationId!, medicationData);
-    } else {
-      result = await ActivityService.createMedication(medicationData);
-    }
-
-    if (mounted) {
-      setState(() => _isLoading = false);
+      // Step 1: Delete all existing schedules
+      debugPrint('Deleting ${_existingScheduleIds.length} existing schedules...');
+      for (int scheduleId in _existingScheduleIds) {
+        try {
+          await provider.deleteSchedule(_existingMedicationId!, scheduleId);
+          debugPrint('✅ Deleted schedule ID: $scheduleId');
+        } catch (e) {
+          debugPrint('❌ Error deleting schedule $scheduleId: $e');
+        }
+      }
       
-      if (result['success']) {
-        // Refresh medications list
-        final provider = Provider.of<ActivityProvider>(context, listen: false);
-        await provider.loadActivityData();
-        _showMessage(result['message']);
-        Navigator.pop(context, true);
+      // Step 2: Update medication details
+      final updateData = <String, dynamic>{
+        'name': _nameController.text.trim(),
+        'dosage': double.parse(_dosageController.text.trim()),
+        'unit': _unitController.text.isEmpty ? 'mg' : _unitController.text.trim(),
+        'color': _selectedColor,
+        'start_date': _startDate.toIso8601String().split('T')[0],
+        'instructions': _instructionsController.text.isNotEmpty ? _instructionsController.text.trim() : null,
+        'prescribed_by': _prescribedByController.text.isNotEmpty ? _prescribedByController.text.trim() : null,
+        'notes': _notesController.text.isNotEmpty ? _notesController.text.trim() : null,
+      };
+      if (_endDate != null) {
+        updateData['end_date'] = _endDate!.toIso8601String().split('T')[0];
       } else {
-        _showMessage(result['message'], isError: true);
+        updateData['end_date'] = null;
+      }
+      
+      debugPrint('Updating medication details...');
+      final updateResult = await provider.updateMedication(_existingMedicationId!, updateData);
+      
+      if (updateResult['success']) {
+        // Step 3: Add new schedules
+        debugPrint('Adding ${schedulesData.length} new schedules...');
+        for (var scheduleData in schedulesData) {
+          try {
+            await provider.addSchedule(_existingMedicationId!, scheduleData);
+            debugPrint('✅ Added schedule: ${scheduleData['time_of_day']}');
+          } catch (e) {
+            debugPrint('❌ Error adding schedule: $e');
+          }
+        }
+        
+        // Step 4: Refresh data
+        await provider.loadActivityData();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Medication updated successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context, true);
+        }
+        setState(() => _isLoading = false);
+        return;
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(updateResult['message']),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        setState(() => _isLoading = false);
+        return;
+      }
+    } else {
+      // Create new medication with schedules
+      final medicationData = {
+        'name': _nameController.text.trim(),
+        'dosage': double.parse(_dosageController.text.trim()),
+        'unit': _unitController.text.isEmpty ? 'mg' : _unitController.text.trim(),
+        'color': _selectedColor,
+        'start_date': _startDate.toIso8601String().split('T')[0],
+        'end_date': _endDate?.toIso8601String().split('T')[0],
+        'instructions': _instructionsController.text.isNotEmpty ? _instructionsController.text.trim() : null,
+        'prescribed_by': _prescribedByController.text.isNotEmpty ? _prescribedByController.text.trim() : null,
+        'notes': _notesController.text.isNotEmpty ? _notesController.text.trim() : null,
+        'schedules': schedulesData,
+      };
+      
+      final result = await provider.createMedication(medicationData);
+      
+      if (mounted) {
+        setState(() => _isLoading = false);
+        
+        if (result['success']) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message']),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context, true);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message']),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
-  }
-
-  void _showMessage(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
 
   @override
@@ -209,7 +301,7 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  widget.existingMedication == null ? 'Add Medication' : 'Edit Medication',
+                  _isEditMode ? 'Edit Medication' : 'Add Medication',
                   style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 20),
@@ -303,17 +395,17 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
                           ),
                           const SizedBox(height: 8),
                           Wrap(
-                            spacing: 8,
+                            spacing: 12,
                             runSpacing: 8,
-                            children: _colorOptions.map((colorName) {
-                              final isSelected = _selectedColor == colorName;
+                            children: _colorOptions.map((colorOption) {
+                              final isSelected = _selectedColor == colorOption['value'];
                               return GestureDetector(
-                                onTap: () => setState(() => _selectedColor = colorName),
+                                onTap: () => setState(() => _selectedColor = colorOption['value']),
                                 child: Container(
                                   width: 36,
                                   height: 36,
                                   decoration: BoxDecoration(
-                                    color: _colorMap[colorName],
+                                    color: colorOption['color'],
                                     shape: BoxShape.circle,
                                     border: isSelected
                                         ? Border.all(color: Colors.black, width: 2)
@@ -321,7 +413,7 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
                                     boxShadow: isSelected
                                         ? [
                                             BoxShadow(
-                                              color: _colorMap[colorName]!.withOpacity(0.5),
+                                              color: (colorOption['color'] as Color).withOpacity(0.5),
                                               blurRadius: 8,
                                               spreadRadius: 2,
                                             )
@@ -426,7 +518,7 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Time slots
+                      // Time slots section
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -445,33 +537,45 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
                             ],
                           ),
                           const SizedBox(height: 8),
-                          ...List.generate(_selectedTimes.length, (index) {
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey[300]!),
-                                borderRadius: BorderRadius.circular(12),
+                          if (_selectedTimes.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Text(
+                                'No times scheduled. Tap "Add Time" to add.',
+                                style: TextStyle(color: Colors.grey[600]),
                               ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      title: Text(_selectedTimes[index].format(context)),
-                                      leading: const Icon(Icons.access_time, color: Colors.purple),
-                                      onTap: () => _selectTime(index),
+                            )
+                          else
+                            ...List.generate(_selectedTimes.length, (index) {
+                              final time = _selectedTimes[index];
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey[300]!),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: ListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        title: Text(
+                                          '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
+                                          style: const TextStyle(fontSize: 16),
+                                        ),
+                                        leading: const Icon(Icons.access_time, color: Colors.purple),
+                                        onTap: () => _selectTime(index),
+                                      ),
                                     ),
-                                  ),
-                                  if (_selectedTimes.length > 1)
                                     IconButton(
                                       icon: const Icon(Icons.close, color: Colors.red),
                                       onPressed: () => _removeTimeSlot(index),
                                     ),
-                                ],
-                              ),
-                            );
-                          }),
+                                  ],
+                                ),
+                              );
+                            }),
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -555,7 +659,7 @@ class _AddMedicationDialogState extends State<AddMedicationDialog> {
                                   color: Colors.white,
                                 ),
                               )
-                            : Text(widget.existingMedication == null ? 'Add Medication' : 'Update'),
+                            : Text(_isEditMode ? 'Update' : 'Add Medication'),
                       ),
                     ),
                   ],
