@@ -179,7 +179,7 @@ class Hydration {
   }
 }
 
-// Medication Schedule Class - FIXED
+// Medication Schedule Class
 class MedicationSchedule {
   final int? id;
   final TimeOfDay timeOfDay;
@@ -199,15 +199,10 @@ class MedicationSchedule {
     final timeStr = json['time_of_day']?.toString() ?? '08:00:00';
     final parts = timeStr.split(':');
     
-    // Ensure we have valid hour and minute
     final hour = parts.isNotEmpty ? int.parse(parts[0]) : 8;
     final minute = parts.length > 1 ? int.parse(parts[1]) : 0;
-    
-    // Validate hour and minute ranges
     final validHour = hour.clamp(0, 23);
     final validMinute = minute.clamp(0, 59);
-    
-    debugPrint('Parsing schedule time: $timeStr -> hour: $validHour, minute: $validMinute');
     
     return MedicationSchedule(
       id: json['id'] as int?,
@@ -273,7 +268,6 @@ class MedicationAdherenceLogEntry {
     TimeOfDay parseTime(String? timeStr) {
       if (timeStr == null) return const TimeOfDay(hour: 0, minute: 0);
       final parts = timeStr.split(':');
-      // Ensure we have valid hour and minute
       final hour = parts.isNotEmpty ? int.parse(parts[0]) : 0;
       final minute = parts.length > 1 ? int.parse(parts[1]) : 0;
       final validHour = hour.clamp(0, 23);
@@ -301,13 +295,14 @@ class MedicationAdherenceLogEntry {
     );
   }
 
+  bool get hasLog => id > 0;
+  
   Color get statusColor {
     switch (status) {
       case 'taken': return Colors.green;
       case 'late': return Colors.orange;
       case 'missed': return Colors.red;
       case 'skipped': return Colors.grey;
-      case 'pending': return Colors.grey;
       default: return Colors.grey;
     }
   }
@@ -318,13 +313,12 @@ class MedicationAdherenceLogEntry {
       case 'late': return 'Late';
       case 'missed': return 'Missed';
       case 'skipped': return 'Skipped';
-      case 'pending': return 'Pending';
       default: return status;
     }
   }
 }
 
-// Medication Dose for a specific day
+// Medication Dose for a specific day - COMPLETELY FIXED with public isPastDue
 class MedicationDose {
   final int medicationId;
   final String medicationName;
@@ -354,15 +348,52 @@ class MedicationDose {
     return '$displayHour:${scheduledTime.minute.toString().padLeft(2, '0')} $period';
   }
 
-  bool get isTaken => status == 'taken' || status == 'late';
-  bool get isPending => status == 'pending';
-  bool get isMissed => status == 'missed';
-  bool get isPastDue => !isTaken && scheduledTime.isBefore(DateTime.now());
+  // If we have a log entry (logId > 0), trust the status from backend
+  bool get hasLog => logId > 0;
+  
+  // Use the stored status from backend if available
+  bool get isTaken => hasLog && (status == 'taken' || status == 'late');
+  bool get isPending => !hasLog;
+  bool get isMissed => !hasLog && isPastDue;
+  
+  // PUBLIC getter for isPastDue (used in UI)
+  bool get isPastDue {
+    if (hasLog) return false;
+    
+    final now = DateTime.now();
+    final scheduledHour = scheduledTime.hour;
+    final scheduledMinute = scheduledTime.minute;
+    final currentHour = now.hour;
+    final currentMinute = now.minute;
+    
+    if (currentHour > scheduledHour) return true;
+    if (currentHour == scheduledHour && currentMinute >= scheduledMinute) return true;
+    return false;
+  }
 
+  // Display status based on actual data
+  String get displayStatus {
+    if (hasLog) {
+      if (status == 'taken') return 'Taken';
+      if (status == 'late') return 'Late';
+      if (status == 'missed') return 'Missed';
+      if (status == 'skipped') return 'Skipped';
+      return status;
+    }
+    if (isPastDue) return 'Late';
+    return 'Pending';
+  }
+
+  // Status color based on actual data
   Color get statusColor {
-    if (isTaken) return Colors.green;
-    if (isPastDue && isPending) return Colors.red;
-    if (isMissed) return Colors.red;
+    if (hasLog) {
+      if (status == 'taken') return Colors.green;
+      if (status == 'late') return Colors.orange;
+      if (status == 'missed') return Colors.red;
+      if (status == 'skipped') return Colors.grey;
+      return Colors.grey;
+    }
+    if (isPastDue) return Colors.orange;
     return Colors.grey;
   }
 }
@@ -406,7 +437,6 @@ class Medication {
       schedules = (json['schedules'] as List)
           .map((s) => MedicationSchedule.fromJson(s))
           .toList();
-      debugPrint('Parsed ${schedules.length} schedules for medication ${json['name']}');
     }
 
     // Parse adherence logs
@@ -423,7 +453,6 @@ class Medication {
       }
     }
 
-    // Parse dates - handle UTC to local conversion
     DateTime parseDate(String? dateStr) {
       if (dateStr == null) return DateTime.now();
       try {
@@ -433,7 +462,6 @@ class Medication {
       }
     }
 
-    // Parse dosage safely
     double parseDosage(dynamic value) {
       if (value == null) return 0.0;
       if (value is int) return value.toDouble();
@@ -481,7 +509,6 @@ class Medication {
     return isActive;
   }
 
-  // Get today's scheduled doses with their taken status
   List<MedicationDose> getTodaysDoses(DateTime today) {
     final doses = <MedicationDose>[];
     final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
@@ -497,7 +524,6 @@ class Medication {
           schedule.timeOfDay.minute,
         );
         
-        // Check if already taken
         final existingLog = todaysLogs.firstWhere(
           (log) => log.scheduleId == schedule.id,
           orElse: () => MedicationAdherenceLogEntry.empty(),
@@ -510,18 +536,16 @@ class Medication {
           scheduledTime: doseTime,
           actualDosage: schedule.dosageOverride ?? dosage,
           unit: schedule.unitOverride ?? unit,
-          status: existingLog.id > 0 ? existingLog.status : 'pending',
+          status: existingLog.hasLog ? existingLog.status : 'pending',
           logId: existingLog.id,
           notes: existingLog.notes,
         ));
       }
     }
     
-    debugPrint('Medication ${name}: generated ${doses.length} doses for ${todayStr}');
     return doses;
   }
 
-  // Check if medication should be taken on a specific day
   bool _shouldTakeToday(MedicationSchedule schedule, DateTime date) {
     if (schedule.daysOfWeek == 'all') return true;
     if (schedule.daysOfWeek == 'weekdays') return date.weekday >= 1 && date.weekday <= 5;
