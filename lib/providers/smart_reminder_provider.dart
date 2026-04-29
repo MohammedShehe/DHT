@@ -4,17 +4,25 @@ import '../services/smart_reminder_service.dart';
 
 class SmartReminderProvider extends ChangeNotifier {
   List<SmartReminder> _reminders = [];
+  List<SmartReminder> _medicationReminders = [];
   bool _isLoading = false;
+  bool _isLoadingMedications = false;
   String? _error;
 
   // Getters
   List<SmartReminder> get reminders => _reminders;
+  List<SmartReminder> get medicationReminders => _medicationReminders;
   List<SmartReminder> get unreadReminders => _reminders.where((r) => !r.isRead).toList();
+  List<SmartReminder> get unreadMedicationReminders => _medicationReminders.where((r) => !r.isRead).toList();
   List<SmartReminder> get highPriorityReminders => 
       _reminders.where((r) => r.priority == ReminderPriority.high || r.priority == ReminderPriority.critical).toList();
   bool get isLoading => _isLoading;
+  bool get isLoadingMedications => _isLoadingMedications;
   String? get error => _error;
   int get unreadCount => _reminders.where((r) => !r.isRead).length;
+  int get unreadMedicationCount => _medicationReminders.where((r) => !r.isRead).length;
+  bool get hasCriticalMedicationReminders => 
+      _medicationReminders.where((r) => r.priority == ReminderPriority.critical && !r.isRead).isNotEmpty;
 
   // Service instance
   final SmartReminderService _service = SmartReminderService();
@@ -24,6 +32,7 @@ class SmartReminderProvider extends ChangeNotifier {
 
   SmartReminderProvider() {
     loadReminders();
+    loadMedicationReminders();
   }
 
   // Load reminders (use cached first, then generate in background)
@@ -40,6 +49,7 @@ class SmartReminderProvider extends ChangeNotifier {
       final cached = _service.getCachedReminders();
       if (cached.isNotEmpty && !forceRefresh) {
         _reminders = cached;
+        _medicationReminders = _service.getMedicationReminders();
         _isLoading = false;
         notifyListeners();
         
@@ -49,6 +59,7 @@ class SmartReminderProvider extends ChangeNotifier {
         // Generate new reminders
         final newReminders = await _service.generateReminders();
         _reminders = newReminders;
+        _medicationReminders = _service.getMedicationReminders();
         _error = null;
         _isLoading = false;
         notifyListeners();
@@ -61,11 +72,42 @@ class SmartReminderProvider extends ChangeNotifier {
     }
   }
 
+  // Load medication reminders specifically (can be called more frequently)
+  Future<void> loadMedicationReminders({bool forceRefresh = false}) async {
+    if (!forceRefresh && _medicationReminders.isNotEmpty && _medicationReminders.length < 10) {
+      return;
+    }
+
+    _isLoadingMedications = true;
+    notifyListeners();
+
+    try {
+      final newMedicationReminders = await _service.generateMedicationReminders();
+      _medicationReminders = newMedicationReminders;
+      
+      // Update main reminders list as well
+      final nonMedicationReminders = _reminders
+          .where((r) => r.category != ReminderCategory.medication)
+          .toList();
+      _reminders = [...nonMedicationReminders, ..._medicationReminders];
+      _reminders.sort((a, b) => b.priority.index.compareTo(a.priority.index));
+      
+      _isLoadingMedications = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _isLoadingMedications = false;
+      notifyListeners();
+      debugPrint('Error loading medication reminders: $e');
+    }
+  }
+
   // Generate reminders in background
   Future<void> _generateRemindersInBackground() async {
     final newReminders = await _service.generateReminders();
     if (newReminders.isNotEmpty) {
       _reminders = newReminders;
+      _medicationReminders = _service.getMedicationReminders();
       notifyListeners();
     }
   }
@@ -90,6 +132,12 @@ class SmartReminderProvider extends ChangeNotifier {
         pointsReward: _reminders[index].pointsReward,
       );
       notifyListeners();
+    }
+    
+    // Check medication list too
+    final medIndex = _medicationReminders.indexWhere((r) => r.id == id);
+    if (medIndex >= 0) {
+      _medicationReminders[medIndex] = _reminders[index];
     }
   }
 
@@ -116,22 +164,62 @@ class SmartReminderProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Mark all medication reminders as read
+  void markAllMedicationRemindersAsRead() {
+    for (int i = 0; i < _medicationReminders.length; i++) {
+      if (!_medicationReminders[i].isRead) {
+        _service.markAsRead(_medicationReminders[i].id);
+        _medicationReminders[i] = SmartReminder(
+          id: _medicationReminders[i].id,
+          title: _medicationReminders[i].title,
+          message: _medicationReminders[i].message,
+          category: _medicationReminders[i].category,
+          priority: _medicationReminders[i].priority,
+          timestamp: _medicationReminders[i].timestamp,
+          isRead: true,
+          actionData: _medicationReminders[i].actionData,
+          actionType: _medicationReminders[i].actionType,
+          expiresAt: _medicationReminders[i].expiresAt,
+          pointsReward: _medicationReminders[i].pointsReward,
+        );
+      }
+    }
+    notifyListeners();
+  }
+
   // Clear all reminders
   void clearReminders() {
     _service.clearReminders();
     _reminders.clear();
+    _medicationReminders.clear();
+    notifyListeners();
+  }
+
+  // Clear medication reminders only
+  void clearMedicationReminders() {
+    _service.clearMedicationReminders();
+    _medicationReminders.clear();
+    _reminders = _reminders
+        .where((r) => r.category != ReminderCategory.medication)
+        .toList();
     notifyListeners();
   }
 
   // Remove a specific reminder
   void removeReminder(String id) {
     _reminders.removeWhere((r) => r.id == id);
+    _medicationReminders.removeWhere((r) => r.id == id);
     notifyListeners();
   }
 
   // Get reminders by category
   List<SmartReminder> getRemindersByCategory(ReminderCategory category) {
     return _reminders.where((r) => r.category == category).toList();
+  }
+
+  // Get medication reminders by priority
+  List<SmartReminder> getMedicationRemindersByPriority(ReminderPriority priority) {
+    return _medicationReminders.where((r) => r.priority == priority && !r.isRead).toList();
   }
 
   // Execute reminder action
@@ -145,15 +233,12 @@ class SmartReminderProvider extends ChangeNotifier {
 
     switch (screen) {
       case 'activity':
-        // Navigate to activity tab with specific tab
         _navigateToActivityTab(context, tab);
         break;
       case 'gamification':
-        // Navigate to gamification tab with specific tab
         _navigateToGamificationTab(context, tab);
         break;
       case 'profile':
-        // Navigate to profile
         _navigateToProfile(context);
         break;
     }
@@ -167,9 +252,9 @@ class SmartReminderProvider extends ChangeNotifier {
   }
 
   void _navigateToActivityTab(BuildContext context, dynamic tab) {
-    // This would need to be implemented based on your navigation structure
-    // For now, we'll just show a message
     debugPrint('Navigate to activity tab: $tab');
+    // In a real implementation, you would use a navigation key or global state
+    // to change the bottom navigation bar index
   }
 
   void _navigateToGamificationTab(BuildContext context, dynamic tab) {
@@ -183,5 +268,11 @@ class SmartReminderProvider extends ChangeNotifier {
   // Dispose callbacks
   void disposeCallbacks() {
     onShowMessage = null;
+  }
+
+  // Refresh all data
+  Future<void> refreshAll() async {
+    await loadReminders(forceRefresh: true);
+    await loadMedicationReminders(forceRefresh: true);
   }
 }

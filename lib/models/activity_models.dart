@@ -318,7 +318,7 @@ class MedicationAdherenceLogEntry {
   }
 }
 
-// Medication Dose for a specific day - COMPLETELY FIXED with public isPastDue
+// Medication Dose for a specific day
 class MedicationDose {
   final int medicationId;
   final String medicationName;
@@ -348,15 +348,12 @@ class MedicationDose {
     return '$displayHour:${scheduledTime.minute.toString().padLeft(2, '0')} $period';
   }
 
-  // If we have a log entry (logId > 0), trust the status from backend
   bool get hasLog => logId > 0;
   
-  // Use the stored status from backend if available
   bool get isTaken => hasLog && (status == 'taken' || status == 'late');
   bool get isPending => !hasLog;
   bool get isMissed => !hasLog && isPastDue;
   
-  // PUBLIC getter for isPastDue (used in UI)
   bool get isPastDue {
     if (hasLog) return false;
     
@@ -371,7 +368,6 @@ class MedicationDose {
     return false;
   }
 
-  // Display status based on actual data
   String get displayStatus {
     if (hasLog) {
       if (status == 'taken') return 'Taken';
@@ -384,7 +380,6 @@ class MedicationDose {
     return 'Pending';
   }
 
-  // Status color based on actual data
   Color get statusColor {
     if (hasLog) {
       if (status == 'taken') return Colors.green;
@@ -431,7 +426,6 @@ class Medication {
   });
 
   factory Medication.fromJson(Map<String, dynamic> json) {
-    // Parse schedules
     List<MedicationSchedule> schedules = [];
     if (json['schedules'] != null && json['schedules'] is List) {
       schedules = (json['schedules'] as List)
@@ -439,7 +433,6 @@ class Medication {
           .toList();
     }
 
-    // Parse adherence logs
     Map<String, List<MedicationAdherenceLogEntry>> adherenceLogs = {};
     if (json['adherence_logs'] != null && json['adherence_logs'] is List) {
       for (var log in json['adherence_logs']) {
@@ -544,6 +537,136 @@ class Medication {
     }
     
     return doses;
+  }
+
+  // ===== NEW HELPER METHODS FOR MEDICATION REMINDERS AND TRACKING =====
+
+  // Get all doses for a specific date range (for adherence tracking)
+  List<MedicationDose> getDosesForDateRange(DateTime startDate, DateTime endDate) {
+    final doses = <MedicationDose>[];
+    
+    for (DateTime date = startDate; date.isBefore(endDate); date = date.add(const Duration(days: 1))) {
+      doses.addAll(getTodaysDoses(date));
+    }
+    
+    return doses;
+  }
+
+  // Calculate adherence rate for a date range
+  double getAdherenceRate(DateTime startDate, DateTime endDate) {
+    final doses = getDosesForDateRange(startDate, endDate);
+    if (doses.isEmpty) return 100.0;
+    
+    int takenCount = doses.where((d) => d.isTaken).length;
+    return (takenCount / doses.length) * 100;
+  }
+
+  // Check if medication is due soon (within next X minutes)
+  bool isDueSoon(int minutes) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final doses = getTodaysDoses(today);
+    
+    for (var dose in doses) {
+      if (dose.isPending) {
+        final minutesUntil = dose.scheduledTime.difference(now).inMinutes;
+        if (minutesUntil <= minutes && minutesUntil > 0) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Get upcoming doses (within next X hours)
+  List<MedicationDose> getUpcomingDoses(int hours) {
+    final doses = <MedicationDose>[];
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    
+    for (var dose in getTodaysDoses(today)) {
+      if (dose.isPending && dose.scheduledTime.isAfter(now)) {
+        final minutesUntil = dose.scheduledTime.difference(now).inMinutes;
+        if (minutesUntil <= hours * 60) {
+          doses.add(dose);
+        }
+      }
+    }
+    return doses;
+  }
+
+  // Get missed doses for today
+  List<MedicationDose> getMissedDoses() {
+    final today = DateTime.now();
+    final doses = getTodaysDoses(today);
+    return doses.where((d) => d.isMissed).toList();
+  }
+
+  // Get late doses for today
+  List<MedicationDose> getLateDoses() {
+    final today = DateTime.now();
+    final doses = getTodaysDoses(today);
+    return doses.where((d) => d.isPastDue && d.isPending).toList();
+  }
+
+  // Get doses that are taken on time
+  List<MedicationDose> getTakenDoses() {
+    final today = DateTime.now();
+    final doses = getTodaysDoses(today);
+    return doses.where((d) => d.isTaken).toList();
+  }
+
+  // Get pending doses (not taken yet, not late)
+  List<MedicationDose> getPendingDoses() {
+    final today = DateTime.now();
+    final doses = getTodaysDoses(today);
+    return doses.where((d) => d.isPending && !d.isPastDue).toList();
+  }
+
+  // Get adherence summary for today
+  Map<String, dynamic> getTodaysAdherenceSummary() {
+    final today = DateTime.now();
+    final doses = getTodaysDoses(today);
+    
+    int total = doses.length;
+    int taken = doses.where((d) => d.isTaken).length;
+    int missed = doses.where((d) => d.isMissed).length;
+    int late = doses.where((d) => d.isPastDue && d.isPending).length;
+    int pending = doses.where((d) => d.isPending && !d.isPastDue).length;
+    
+    double percentage = total > 0 ? (taken / total) * 100 : 100.0;
+    
+    return {
+      'total': total,
+      'taken': taken,
+      'missed': missed,
+      'late': late,
+      'pending': pending,
+      'percentage': percentage,
+      'status': percentage == 100 ? 'complete' : (taken > 0 ? 'partial' : 'none'),
+    };
+  }
+
+  // Get the next upcoming dose
+  MedicationDose? getNextUpcomingDose() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final doses = getTodaysDoses(today);
+    
+    final upcoming = doses.where((d) => d.isPending && d.scheduledTime.isAfter(now)).toList();
+    if (upcoming.isEmpty) return null;
+    
+    upcoming.sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
+    return upcoming.first;
+  }
+
+  // Get time until next dose (in minutes)
+  int? getMinutesUntilNextDose() {
+    final nextDose = getNextUpcomingDose();
+    if (nextDose == null) return null;
+    
+    final minutesUntil = nextDose.scheduledTime.difference(DateTime.now()).inMinutes;
+    return minutesUntil > 0 ? minutesUntil : null;
   }
 
   bool _shouldTakeToday(MedicationSchedule schedule, DateTime date) {

@@ -1,11 +1,14 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/smart_reminder_model.dart';
 import '../models/health_profile_model.dart';
 import '../models/gamification_models.dart';
+import '../models/activity_models.dart';
 import '../services/goal_service.dart';
 import '../services/health_service.dart';
 import '../services/auth_service.dart';
+import '../services/activity_service.dart';
 
 class SmartReminderService {
   static final SmartReminderService _instance = SmartReminderService._internal();
@@ -13,7 +16,9 @@ class SmartReminderService {
   SmartReminderService._internal();
 
   List<SmartReminder> _generatedReminders = [];
+  List<SmartReminder> _medicationReminders = [];
   DateTime _lastGenerationTime = DateTime.now().subtract(const Duration(hours: 1));
+  DateTime _lastMedicationCheckTime = DateTime.now().subtract(const Duration(minutes: 30));
 
   // Helper method to safely convert any value to int
   int _toInt(dynamic value) {
@@ -157,16 +162,6 @@ class SmartReminderService {
       actionData: {'screen': 'activity', 'tab': 0},
       actionType: 'log_meal',
     ),
-    SmartReminderTemplate(
-      id: 'nutrition_protein',
-      title: 'Protein Intake',
-      messageTemplate: 'Your protein intake is at {protein}g ({percentage}% of recommended). {message}',
-      category: ReminderCategory.nutrition,
-      priority: ReminderPriority.medium,
-      triggers: ['protein_check'],
-      actionData: {'screen': 'activity', 'tab': 0},
-      actionType: 'log_meal',
-    ),
 
     // Mindfulness reminders
     SmartReminderTemplate(
@@ -234,48 +229,76 @@ class SmartReminderService {
       pointsReward: 5,
     ),
 
-    // Achievement reminders
+    // MEDICATION REMINDERS - NEW TEMPLATES
     SmartReminderTemplate(
-      id: 'achievement_unlock',
-      title: 'Achievement Unlocked!',
-      messageTemplate: 'You\'ve earned the "{badgeName}" badge! +{points} points',
-      category: ReminderCategory.achievement,
-      priority: ReminderPriority.high,
-      triggers: ['badge_earned'],
-      actionData: {'screen': 'gamification', 'tab': 0},
-      pointsReward: 0, // Points already included in badge
-    ),
-
-    // Medication reminders
-    SmartReminderTemplate(
-      id: 'medication_time',
-      title: 'Medication Time',
-      messageTemplate: 'Time to take {medicationName} ({dosage}). {instruction}',
+      id: 'medication_upcoming',
+      title: 'Upcoming Medication',
+      messageTemplate: '{medicationName} ({dosage}) is due in {minutes} minutes. Remember to take it {instructions}.',
       category: ReminderCategory.medication,
-      priority: ReminderPriority.critical,
-      triggers: ['medication_schedule'],
+      priority: ReminderPriority.high,
+      triggers: ['medication_upcoming'],
       actionData: {'screen': 'activity', 'tab': 4},
       actionType: 'take_medication',
     ),
-
-    // BMR-based reminders
     SmartReminderTemplate(
-      id: 'bmr_maintenance',
-      title: 'Calorie Maintenance',
-      messageTemplate: 'Your BMR is {bmr} calories/day. To maintain weight, aim for {maintenance} calories with your activity level.',
-      category: ReminderCategory.nutrition,
-      priority: ReminderPriority.medium,
-      triggers: ['bmr_calculated'],
-      actionData: {'screen': 'profile'},
+      id: 'medication_time',
+      title: 'Time for Medication',
+      messageTemplate: 'Time to take {medicationName} ({dosage}) now. {instructions}',
+      category: ReminderCategory.medication,
+      priority: ReminderPriority.critical,
+      triggers: ['medication_due'],
+      actionData: {'screen': 'activity', 'tab': 4},
+      actionType: 'take_medication',
+      pointsReward: 10,
     ),
     SmartReminderTemplate(
-      id: 'bmr_deficit',
-      title: 'Weight Loss Progress',
-      messageTemplate: 'With a {deficit} calorie deficit, you could lose {weightLoss}kg per week. You\'re on track!',
-      category: ReminderCategory.nutrition,
+      id: 'medication_late',
+      title: 'Medication Late',
+      messageTemplate: 'Your {medicationName} is due! Please take it as soon as possible. {instructions}',
+      category: ReminderCategory.medication,
+      priority: ReminderPriority.critical,
+      triggers: ['medication_late'],
+      actionData: {'screen': 'activity', 'tab': 4},
+      actionType: 'take_medication',
+    ),
+    SmartReminderTemplate(
+      id: 'medication_missed',
+      title: 'Missed Medication',
+      messageTemplate: 'You missed your {medicationName} scheduled for {scheduledTime}. Please take it now if still appropriate.',
+      category: ReminderCategory.medication,
+      priority: ReminderPriority.critical,
+      triggers: ['medication_missed'],
+      actionData: {'screen': 'activity', 'tab': 4},
+      actionType: 'take_medication',
+    ),
+    SmartReminderTemplate(
+      id: 'medication_refill',
+      title: 'Refill Reminder',
+      messageTemplate: 'You have {daysLeft} days left of {medicationName}. Time to request a refill!',
+      category: ReminderCategory.medication,
       priority: ReminderPriority.medium,
-      triggers: ['weight_loss_goal'],
-      actionData: {'screen': 'profile'},
+      triggers: ['medication_low_supply'],
+      actionData: {'screen': 'activity', 'tab': 4},
+      actionType: 'medication_refill',
+    ),
+    SmartReminderTemplate(
+      id: 'medication_adherence',
+      title: 'Adherence Milestone',
+      messageTemplate: 'Great job! You\'ve taken your medications on time for {days} days in a row!',
+      category: ReminderCategory.medication,
+      priority: ReminderPriority.high,
+      triggers: ['medication_adherence_milestone'],
+      actionData: {'screen': 'activity', 'tab': 4},
+      pointsReward: 25,
+    ),
+    SmartReminderTemplate(
+      id: 'medication_instruction',
+      title: 'Medication Instruction',
+      messageTemplate: 'Remember to {instruction} with your {medicationName} for best results.',
+      category: ReminderCategory.medication,
+      priority: ReminderPriority.low,
+      triggers: ['medication_general'],
+      actionData: {'screen': 'activity', 'tab': 4},
     ),
   ];
 
@@ -295,6 +318,11 @@ class SmartReminderService {
       final todayStats = await _getTodayStats();
       final streakData = await _getStreakData();
       final bmr = await _calculateBMR(healthProfile);
+      
+      // MEDICATION DATA
+      final medications = await _getMedications();
+      final upcomingDoses = await _getUpcomingMedicationDoses();
+      final missedDoses = await _getMissedMedicationDoses();
 
       // Check current time
       final now = DateTime.now();
@@ -302,16 +330,12 @@ class SmartReminderService {
 
       // Time-based triggers
       if (hour >= 5 && hour <= 8) {
-        // Morning
         newReminders.addAll(await _handleMorningTriggers(healthProfile, todayStats, bmr));
       } else if (hour >= 11 && hour <= 13) {
-        // Midday
         newReminders.addAll(await _handleMiddayTriggers(healthProfile, todayStats));
       } else if (hour >= 15 && hour <= 17) {
-        // Afternoon
         newReminders.addAll(await _handleAfternoonTriggers(todayStats));
       } else if (hour >= 20 && hour <= 23) {
-        // Evening
         newReminders.addAll(await _handleEveningTriggers(healthProfile, todayStats));
       }
 
@@ -333,16 +357,21 @@ class SmartReminderService {
       // Check streaks
       newReminders.addAll(await _checkStreaks(streakData));
 
-      // Check medication schedule
-      newReminders.addAll(await _checkMedicationSchedule());
+      // ===== ADD MEDICATION REMINDERS =====
+      newReminders.addAll(await _checkMedicationSchedule(medications, upcomingDoses, missedDoses));
 
       // BMR-based reminders
       newReminders.addAll(await _generateBMRReminders(healthProfile, bmr, todayStats));
 
-      // Limit to 10 most relevant reminders
-      if (newReminders.length > 10) {
+      // Store medication reminders separately for tracking
+      _medicationReminders = newReminders
+          .where((r) => r.category == ReminderCategory.medication)
+          .toList();
+
+      // Limit to 15 most relevant reminders (increased for medications)
+      if (newReminders.length > 15) {
         newReminders.sort((a, b) => b.priority.index.compareTo(a.priority.index));
-        newReminders = newReminders.take(10).toList();
+        newReminders = newReminders.take(15).toList();
       }
 
       _generatedReminders = newReminders;
@@ -351,6 +380,67 @@ class SmartReminderService {
       return newReminders;
     } catch (e) {
       debugPrint('Error generating smart reminders: $e');
+      return [];
+    }
+  }
+
+  // Get all medication-specific reminders
+  List<SmartReminder> getMedicationReminders() {
+    return _medicationReminders;
+  }
+
+  // Get pending medication reminders (not taken yet)
+  List<SmartReminder> getPendingMedicationReminders() {
+    return _medicationReminders.where((r) => !r.isRead).toList();
+  }
+
+  // Get high priority medication reminders
+  List<SmartReminder> getCriticalMedicationReminders() {
+    return _medicationReminders
+        .where((r) => r.priority == ReminderPriority.critical && !r.isRead)
+        .toList();
+  }
+
+  // Generate medication reminders only (can be called more frequently)
+  Future<List<SmartReminder>> generateMedicationReminders() async {
+    if (DateTime.now().difference(_lastMedicationCheckTime).inMinutes < 15) {
+      return _medicationReminders;
+    }
+
+    try {
+      final upcomingDoses = await _getUpcomingMedicationDoses();
+      final missedDoses = await _getMissedMedicationDoses();
+      final medications = await _getMedications();
+
+      final newMedicationReminders = await _checkMedicationSchedule(
+        medications, 
+        upcomingDoses, 
+        missedDoses
+      );
+
+      // Merge with existing reminders (keep unread ones)
+      final existingUnread = _medicationReminders.where((r) => !r.isRead).toList();
+      final allReminders = [...existingUnread, ...newMedicationReminders];
+      
+      // Remove duplicates based on ID
+      final uniqueReminders = <String, SmartReminder>{};
+      for (var r in allReminders) {
+        uniqueReminders[r.id] = r;
+      }
+      
+      _medicationReminders = uniqueReminders.values.toList();
+      _lastMedicationCheckTime = DateTime.now();
+
+      // Also update main reminders list
+      final nonMedicationReminders = _generatedReminders
+          .where((r) => r.category != ReminderCategory.medication)
+          .toList();
+      _generatedReminders = [...nonMedicationReminders, ..._medicationReminders];
+      _generatedReminders.sort((a, b) => b.priority.index.compareTo(a.priority.index));
+
+      return _medicationReminders;
+    } catch (e) {
+      debugPrint('Error generating medication reminders: $e');
       return [];
     }
   }
@@ -378,11 +468,26 @@ class SmartReminderService {
         pointsReward: _generatedReminders[index].pointsReward,
       );
     }
+    
+    // Also mark in medication list if applicable
+    final medIndex = _medicationReminders.indexWhere((r) => r.id == id);
+    if (medIndex >= 0) {
+      _medicationReminders[medIndex] = _generatedReminders[index];
+    }
   }
 
   // Clear all reminders
   void clearReminders() {
     _generatedReminders.clear();
+    _medicationReminders.clear();
+  }
+
+  // Clear medication reminders only
+  void clearMedicationReminders() {
+    _medicationReminders.clear();
+    _generatedReminders = _generatedReminders
+        .where((r) => r.category != ReminderCategory.medication)
+        .toList();
   }
 
   // ===== HELPER METHODS =====
@@ -524,6 +629,77 @@ class SmartReminderService {
     }
 
     return bmr.round();
+  }
+
+  // ===== MEDICATION-SPECIFIC METHODS =====
+
+  Future<List<Medication>> _getMedications() async {
+    try {
+      return await ActivityService.getMedications();
+    } catch (e) {
+      debugPrint('Error getting medications: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _getUpcomingMedicationDoses() async {
+    try {
+      final doses = await ActivityService.getUpcomingMedicationDoses();
+      return doses;
+    } catch (e) {
+      debugPrint('Error getting upcoming doses: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _getMissedMedicationDoses() async {
+    try {
+      final missed = await ActivityService.getMissedMedicationDoses(DateTime.now());
+      return missed;
+    } catch (e) {
+      debugPrint('Error getting missed doses: $e');
+      return [];
+    }
+  }
+
+  Future<void> _logMedicationIntake(int medicationId, int scheduleId) async {
+    try {
+      final now = DateTime.now();
+      final logDate = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final logTime = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:00';
+      
+      await ActivityService.logMedicationIntake(
+        medicationId: medicationId,
+        scheduleId: scheduleId,
+        logDate: logDate,
+        logTime: logTime,
+        status: 'taken',
+        actualTime: logTime,
+      );
+    } catch (e) {
+      debugPrint('Error logging medication intake: $e');
+    }
+  }
+
+  Future<int> _getMedicationAdherenceStreak(int medicationId) async {
+    try {
+      final startDate = DateTime.now().subtract(const Duration(days: 30));
+      final endDate = DateTime.now();
+      final result = await ActivityService.getMedicationAdherenceRate(
+        medicationId, 
+        startDate, 
+        endDate
+      );
+      
+      if (result['success'] && result['adherence'] != null) {
+        // Calculate streak from adherence data
+        final adherence = result['adherence'];
+        return _toInt(adherence['current_streak']);
+      }
+    } catch (e) {
+      debugPrint('Error getting adherence streak: $e');
+    }
+    return 0;
   }
 
   // ===== TRIGGER HANDLERS =====
@@ -718,10 +894,185 @@ class SmartReminderService {
     return reminders;
   }
 
-  Future<List<SmartReminder>> _checkMedicationSchedule() async {
-    // This would check medication schedules
-    // For now, return empty list
-    return [];
+  // ===== COMPREHENSIVE MEDICATION SCHEDULE CHECK =====
+  Future<List<SmartReminder>> _checkMedicationSchedule(
+    List<Medication> medications,
+    List<Map<String, dynamic>> upcomingDoses,
+    List<Map<String, dynamic>> missedDoses,
+  ) async {
+    List<SmartReminder> reminders = [];
+    final now = DateTime.now();
+    final currentMinute = now.hour * 60 + now.minute;
+
+    // Process upcoming doses (15-30 minutes before scheduled time)
+    for (var dose in upcomingDoses) {
+      final scheduledTime = _parseDateTime(dose['scheduled_time']);
+      if (scheduledTime == null) continue;
+      
+      final minutesUntil = scheduledTime.difference(now).inMinutes;
+      final medicationName = dose['medication_name']?.toString() ?? 'Your medication';
+      final dosage = dose['actual_dosage']?.toString() ?? '';
+      final unit = dose['unit']?.toString() ?? 'mg';
+      final instructions = dose['instructions']?.toString() ?? '';
+      final medicationId = _toInt(dose['medication_id']);
+      final scheduleId = _toInt(dose['schedule_id']);
+
+      // Create different reminders based on how close the dose is
+      if (minutesUntil <= 5 && minutesUntil >= 0) {
+        // Due now
+        final template = _templates.firstWhere((t) => t.id == 'medication_time');
+        reminders.add(template.createReminder(replacements: {
+          'medicationName': medicationName,
+          'dosage': '$dosage $unit',
+          'instructions': instructions.isNotEmpty ? instructions : 'Take as prescribed',
+        }));
+      } else if (minutesUntil <= 15 && minutesUntil > 5) {
+        // Upcoming in 5-15 minutes
+        final template = _templates.firstWhere((t) => t.id == 'medication_upcoming');
+        reminders.add(template.createReminder(replacements: {
+          'medicationName': medicationName,
+          'dosage': '$dosage $unit',
+          'minutes': minutesUntil.toString(),
+          'instructions': instructions.isNotEmpty ? instructions : '',
+        }));
+      } else if (minutesUntil < 0 && minutesUntil > -60) {
+        // Late but less than 1 hour late
+        final template = _templates.firstWhere((t) => t.id == 'medication_late');
+        reminders.add(template.createReminder(replacements: {
+          'medicationName': medicationName,
+          'dosage': '$dosage $unit',
+          'instructions': instructions.isNotEmpty ? instructions : 'Take it now',
+        }));
+      }
+    }
+
+    // Process missed doses (more than 1 hour late)
+    for (var dose in missedDoses) {
+      final scheduledTime = _parseDateTime(dose['scheduled_time']);
+      if (scheduledTime == null) continue;
+      
+      final minutesLate = now.difference(scheduledTime).inMinutes;
+      final medicationName = dose['medication_name']?.toString() ?? 'Your medication';
+      final dosage = dose['actual_dosage']?.toString() ?? '';
+      final unit = dose['unit']?.toString() ?? 'mg';
+      final instructions = dose['instructions']?.toString() ?? '';
+
+      if (minutesLate > 60) {
+        final template = _templates.firstWhere((t) => t.id == 'medication_missed');
+        reminders.add(template.createReminder(replacements: {
+          'medicationName': medicationName,
+          'dosage': '$dosage $unit',
+          'scheduledTime': _formatTime(scheduledTime),
+        }));
+      }
+    }
+
+    // Check for low supply/refill reminders
+    for (var medication in medications) {
+      if (medication.endDate != null) {
+        final daysLeft = medication.endDate!.difference(now).inDays;
+        if (daysLeft <= 7 && daysLeft > 0) {
+          final template = _templates.firstWhere((t) => t.id == 'medication_refill');
+          reminders.add(template.createReminder(replacements: {
+            'daysLeft': daysLeft.toString(),
+            'medicationName': medication.name,
+          }));
+        }
+      }
+      
+      // Adherence streak milestone
+      final adherenceStreak = await _getMedicationAdherenceStreak(medication.id);
+      if (adherenceStreak == 7 || adherenceStreak == 14 || adherenceStreak == 30) {
+        final template = _templates.firstWhere((t) => t.id == 'medication_adherence');
+        reminders.add(template.createReminder(replacements: {
+          'days': adherenceStreak.toString(),
+        }));
+      }
+      
+      // General instruction reminder (once per medication per day)
+      if (medication.instructions != null && medication.instructions!.isNotEmpty) {
+        // Check if we already sent an instruction reminder today for this medication
+        final lastReminderKey = 'med_instruction_${medication.id}_${now.day}';
+        if (await _shouldSendReminder(lastReminderKey, 24)) {
+          final template = _templates.firstWhere((t) => t.id == 'medication_instruction');
+          reminders.add(template.createReminder(replacements: {
+            'instruction': medication.instructions!,
+            'medicationName': medication.name,
+          }));
+          await _markReminderSent(lastReminderKey);
+        }
+      }
+    }
+
+    // Set expiration times for medication reminders (1 hour for due, 2 hours for missed)
+    final updatedReminders = <SmartReminder>[];
+    for (var reminder in reminders) {
+      DateTime? expiresAt;
+      if (reminder.id.contains('medication_time') || reminder.id.contains('medication_upcoming')) {
+        expiresAt = DateTime.now().add(const Duration(hours: 1));
+      } else if (reminder.id.contains('medication_missed')) {
+        expiresAt = DateTime.now().add(const Duration(hours: 2));
+      } else if (reminder.id.contains('medication_late')) {
+        expiresAt = DateTime.now().add(const Duration(hours: 1));
+      }
+      
+      updatedReminders.add(SmartReminder(
+        id: reminder.id,
+        title: reminder.title,
+        message: reminder.message,
+        category: reminder.category,
+        priority: reminder.priority,
+        timestamp: reminder.timestamp,
+        isRead: reminder.isRead,
+        actionData: reminder.actionData,
+        actionType: reminder.actionType,
+        expiresAt: expiresAt,
+        pointsReward: reminder.pointsReward,
+      ));
+    }
+
+    return updatedReminders;
+  }
+
+  // ===== HELPER METHODS FOR MEDICATION REMINDERS =====
+
+  DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+    try {
+      return DateTime.parse(value.toString());
+    } catch (e) {
+      return null;
+    }
+  }
+
+  String _formatTime(DateTime time) {
+    final hour = time.hour;
+    final minute = time.minute;
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+  }
+
+  Future<bool> _shouldSendReminder(String key, int hoursInterval) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastSent = prefs.getInt(key);
+      if (lastSent == null) return true;
+      
+      final lastSentTime = DateTime.fromMillisecondsSinceEpoch(lastSent);
+      return DateTime.now().difference(lastSentTime).inHours >= hoursInterval;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  Future<void> _markReminderSent(String key) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(key, DateTime.now().millisecondsSinceEpoch);
+    } catch (e) {
+      debugPrint('Error marking reminder sent: $e');
+    }
   }
 
   Future<List<SmartReminder>> _generateBMRReminders(HealthProfileModel? profile, int bmr, Map<String, dynamic> todayStats) async {
@@ -754,6 +1105,11 @@ class SmartReminderService {
   // Get unread count
   int getUnreadCount() {
     return _generatedReminders.where((r) => !r.isRead).length;
+  }
+
+  // Get unread medication count
+  int getUnreadMedicationCount() {
+    return _medicationReminders.where((r) => !r.isRead).length;
   }
 
   // Get reminders by category
